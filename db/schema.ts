@@ -58,6 +58,11 @@ export const timeOffKind = pgEnum("time_off_kind", [
   "half_pm",
   "unpaid",
 ]);
+export const periodStatus = pgEnum("period_status", ["open", "closed"]);
+export const periodCloseAction = pgEnum("period_close_action", [
+  "close",
+  "reopen",
+]);
 export const accessScope = pgEnum("access_scope", [
   "self",
   "user",
@@ -136,6 +141,9 @@ export const orgs = pgTable("orgs", {
   reviewThresholdMinutes: integer("review_threshold_minutes")
     .notNull()
     .default(8 * 60),
+
+  /** 정산기간 종료 후 보정 유예일. 이 기간이 지나면 자동 마감된다. */
+  closeGraceDays: integer("close_grace_days").notNull().default(3),
 
   createdAt: timestamp("created_at", { withTimezone: true })
     .notNull()
@@ -374,6 +382,83 @@ export const timeOff = pgTable(
       .defaultNow(),
   },
   (t) => [uniqueIndex("time_off_user_date").on(t.userId, t.date)],
+);
+
+/**
+ * 정산기간과 마감 상태.
+ *
+ * 마감이 없으면 지난 주 CSV를 다시 올릴 때 확정된 과거 근무시간이 조용히 바뀐다.
+ * 근태 데이터에서는 치명적이다. 정산기간이 끝나고 유예일이 지나면 잠근다.
+ */
+export const settlementPeriods = pgTable(
+  "settlement_periods",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    orgId: uuid("org_id")
+      .notNull()
+      .references(() => orgs.id),
+    periodStart: date("period_start", { mode: "string" }).notNull(),
+    /** 포함 */
+    periodEnd: date("period_end", { mode: "string" }).notNull(),
+    status: periodStatus("status").notNull().default("open"),
+    closedAt: timestamp("closed_at", { withTimezone: true }),
+  },
+  (t) => [uniqueIndex("settlement_periods_org_start").on(t.orgId, t.periodStart)],
+);
+
+/** 마감·재마감 이력. append-only — status는 여기서 파생되는 조회용 값이다. */
+export const periodCloseEvents = pgTable(
+  "period_close_events",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    periodId: uuid("period_id")
+      .notNull()
+      .references(() => settlementPeriods.id),
+    action: periodCloseAction("action").notNull(),
+    /** 자동 마감이면 null */
+    actorUserId: uuid("actor_user_id").references(() => users.id),
+    reason: text("reason"),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+  },
+  (t) => [index("period_close_events_period").on(t.periodId, t.createdAt)],
+);
+
+/**
+ * 마감 시점의 개인별 집계 스냅샷.
+ *
+ * 마감 후 휴게 규칙 같은 설정이 바뀌면 재계산 결과가 달라진다. 마감된 기간은
+ * **당시 값**을 공식 기록으로 보여줘야 하므로 얼려둔다.
+ * 현재 재계산값과 차이가 나면 "마감 후 변경"으로 표시한다.
+ */
+export const periodSnapshots = pgTable(
+  "period_snapshots",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    orgId: uuid("org_id")
+      .notNull()
+      .references(() => orgs.id),
+    periodId: uuid("period_id")
+      .notNull()
+      .references(() => settlementPeriods.id),
+    userId: uuid("user_id")
+      .notNull()
+      .references(() => users.id),
+
+    targetMinutes: integer("target_minutes").notNull(),
+    workedMinutes: integer("worked_minutes").notNull(),
+    nightMinutes: integer("night_minutes").notNull(),
+    holidayMinutes: integer("holiday_minutes").notNull(),
+    overtimeMinutes: integer("overtime_minutes").notNull(),
+    /** 반올림한 분 */
+    avgWeeklyMinutes: integer("avg_weekly_minutes").notNull(),
+
+    capturedAt: timestamp("captured_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+  },
+  (t) => [uniqueIndex("period_snapshots_period_user").on(t.periodId, t.userId)],
 );
 
 /**

@@ -92,6 +92,76 @@ export type PeriodSummary = {
   maxConsecutiveWorkDays: number;
 };
 
+/** 마감 시점에 얼려두는 개인별 집계값 */
+export type PeriodSnapshot = {
+  targetMinutes: number;
+  workedMinutes: number;
+  nightMinutes: number;
+  holidayMinutes: number;
+  overtimeMinutes: number;
+  /** 반올림한 분 */
+  avgWeeklyMinutes: number;
+};
+
+export type SnapshotDiff = {
+  changed: boolean;
+  /** 현재값 − 스냅샷. 0인 항목은 담지 않는다. */
+  deltas: Partial<Record<keyof PeriodSnapshot, number>>;
+};
+
+export function snapshotOf(s: PeriodSummary): PeriodSnapshot {
+  return {
+    targetMinutes: s.targetMinutes,
+    workedMinutes: s.workedMinutes,
+    nightMinutes: s.nightMinutes,
+    holidayMinutes: s.holidayMinutes,
+    overtimeMinutes: s.overtimeMinutes,
+    avgWeeklyMinutes: Math.round(s.avgWeeklyMinutes),
+  };
+}
+
+/** 자동 마감 예정일. 정산기간 종료 + 유예일. */
+export function closeDateFor(
+  periodEnd: string,
+  graceDays: number,
+  zone: string,
+): string {
+  return DateTime.fromISO(periodEnd, { zone })
+    .plus({ days: graceDays })
+    .toISODate()!;
+}
+
+export function isClosable(
+  periodEnd: string,
+  graceDays: number,
+  asOf: Date,
+  zone: string,
+): boolean {
+  const asOfDate = DateTime.fromJSDate(asOf, { zone }).toISODate()!;
+  return asOfDate > closeDateFor(periodEnd, graceDays, zone);
+}
+
+/**
+ * 마감 후 값이 바뀌었는지. 늦게 도착한 태그나 설정 변경으로 발생한다.
+ *
+ * 임포트를 막지 않는 이유: 원본은 append-only여야 하고, 막으면 데이터가 유실된다.
+ * 대신 공식 기록은 스냅샷을 쓰고 차이를 눈에 보이게 만든다.
+ */
+export function diffAgainstSnapshot(
+  snapshot: PeriodSnapshot,
+  current: PeriodSummary,
+): SnapshotDiff {
+  const now = snapshotOf(current);
+  const deltas: Partial<Record<keyof PeriodSnapshot, number>> = {};
+
+  for (const key of Object.keys(snapshot) as Array<keyof PeriodSnapshot>) {
+    const delta = now[key] - snapshot[key];
+    if (delta !== 0) deltas[key] = delta;
+  }
+
+  return { changed: Object.keys(deltas).length > 0, deltas };
+}
+
 function eachDate(start: string, end: string, zone: string): string[] {
   const out: string[] = [];
   let cursor = DateTime.fromISO(start, { zone });

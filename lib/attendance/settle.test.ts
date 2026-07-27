@@ -1,6 +1,12 @@
 import { describe, expect, it } from "vitest";
 import { DateTime } from "luxon";
-import { computePeriodSummary } from "./settle";
+import {
+  closeDateFor,
+  computePeriodSummary,
+  diffAgainstSnapshot,
+  isClosable,
+  snapshotOf,
+} from "./settle";
 import type { SettlementRules, TimeOffEntry } from "./settle";
 import type { ComputedDay } from "./types";
 
@@ -430,5 +436,85 @@ describe("확인 필요 항목", () => {
     const s = computePeriodSummary(week({ days }), base);
 
     expect(s.maxConsecutiveWorkDays).toBe(1);
+  });
+});
+
+// ─────────────────────────────────────────────────────────────
+describe("마감 — 확정된 과거가 조용히 바뀌지 않게", () => {
+  it("정산기간 종료 + 유예일이 마감 예정일이다", () => {
+    expect(closeDateFor("2026-03-08", 3, "Asia/Seoul")).toBe("2026-03-11");
+  });
+
+  it("유예일 당일까지는 마감하지 않는다", () => {
+    const zone = "Asia/Seoul";
+    expect(isClosable("2026-03-08", 3, kst("2026-03-11T23:00"), zone)).toBe(
+      false,
+    );
+    expect(isClosable("2026-03-08", 3, kst("2026-03-12T00:10"), zone)).toBe(
+      true,
+    );
+  });
+
+  it("유예일이 0이면 종료 다음 날 마감된다", () => {
+    const zone = "Asia/Seoul";
+    expect(isClosable("2026-03-08", 0, kst("2026-03-08T23:59"), zone)).toBe(
+      false,
+    );
+    expect(isClosable("2026-03-08", 0, kst("2026-03-09T00:01"), zone)).toBe(
+      true,
+    );
+  });
+
+  it("변경이 없으면 차이가 없다", () => {
+    const s = computePeriodSummary(week({ days: weekdays(8 * 60) }), base);
+    const snap = snapshotOf(s);
+
+    expect(diffAgainstSnapshot(snap, s).changed).toBe(false);
+  });
+
+  it("마감 후 태그가 늦게 들어오면 차이로 드러난다", () => {
+    const before = computePeriodSummary(
+      week({ days: weekdays(8 * 60) }),
+      base,
+    );
+    const snap = snapshotOf(before);
+
+    // 토요일 근무 기록이 뒤늦게 임포트됨
+    const after = computePeriodSummary(
+      week({
+        days: [
+          ...weekdays(8 * 60),
+          d("2026-03-07", 4 * 60, { isHoliday: true, nightMinutes: 30 }),
+        ],
+      }),
+      base,
+    );
+
+    const diff = diffAgainstSnapshot(snap, after);
+    expect(diff.changed).toBe(true);
+    expect(diff.deltas.workedMinutes).toBe(4 * 60);
+    expect(diff.deltas.holidayMinutes).toBe(4 * 60);
+    expect(diff.deltas.nightMinutes).toBe(30);
+    expect(diff.deltas.overtimeMinutes).toBe(4 * 60);
+    // 목표는 안 변한다
+    expect(diff.deltas.targetMinutes).toBeUndefined();
+  });
+
+  it("마감 후 규칙이 바뀌면 목표 변화로 드러난다", () => {
+    const before = computePeriodSummary(
+      week({ days: weekdays(8 * 60) }),
+      base,
+    );
+    const snap = snapshotOf(before);
+
+    // 뒤늦게 공휴일이 등록됨 → 소정근로가 줄어든다
+    const after = computePeriodSummary(
+      week({ days: weekdays(8 * 60) }),
+      withRules({ holidays: ["2026-03-04"] }),
+    );
+
+    const diff = diffAgainstSnapshot(snap, after);
+    expect(diff.changed).toBe(true);
+    expect(diff.deltas.targetMinutes).toBe(-8 * 60);
   });
 });
