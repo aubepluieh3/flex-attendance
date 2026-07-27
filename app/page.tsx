@@ -41,6 +41,13 @@ const FLAG_LABEL: Record<DayFlag, string> = {
   holiday_work: "휴일 근무",
 };
 
+const OFF_LABEL = {
+  full: "연차",
+  half_am: "오전 반차",
+  half_pm: "오후 반차",
+  unpaid: "무급휴가",
+} as const;
+
 function hm(minutes: number): string {
   const sign = minutes < 0 ? "-" : "";
   const abs = Math.abs(Math.round(minutes));
@@ -107,6 +114,7 @@ export default async function Page({
 
   const dates = eachDate(range.start, range.end, zone);
   const byDate = new Map<string, ComputedDay>(days.map((d) => [d.workDate, d]));
+  const offByDate = new Map(off.map((o) => [o.date, o]));
 
   // 마감된 기간은 스냅샷이 공식 기록이다. 지금 재계산한 값과 다르면
   // 늦게 온 태그나 설정 변경이 있었다는 뜻이므로 드러낸다.
@@ -202,6 +210,9 @@ export default async function Page({
     todayMinutes,
     neededToday,
     leaveAt,
+    leaveCrossesMidnight: leaveAt
+      ? DateTime.fromJSDate(leaveAt, { zone }).toISODate() !== asOfDate
+      : false,
     note: !isTodayBusiness
       ? "오늘은 영업일이 아닙니다. 일한 시간은 휴일 근무로 집계됩니다."
       : summary.remainingMinutes === 0
@@ -582,14 +593,19 @@ export default async function Page({
               {dates.map((date) => {
                 const d = byDate.get(date);
                 const l = label(date, zone);
+                const dayOff = offByDate.get(date);
                 if (!d) {
                   return (
                     <tr key={date}>
                       <td>
                         {l.md} ({l.dow})
                       </td>
+                      {/*
+                        휴가를 안 쓰면 연차 쓴 날이 "기록 없음"으로 남아서,
+                        쉰 날인지 사원증을 안 찍은 날인지 구분되지 않는다.
+                      */}
                       <td colSpan={5} className="none">
-                        기록 없음
+                        {dayOff ? OFF_LABEL[dayOff.kind] : "기록 없음"}
                       </td>
                       <td />
                     </tr>
@@ -608,6 +624,9 @@ export default async function Page({
                       {d.status === "incomplete" ? "—" : hm(d.workMinutes)}
                     </td>
                     <td>
+                      {dayOff && (
+                        <span className="tag">{OFF_LABEL[dayOff.kind]}</span>
+                      )}
                       {d.status === "incomplete" && (
                         <span className="tag">미완료</span>
                       )}

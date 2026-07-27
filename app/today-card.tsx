@@ -20,6 +20,8 @@ export type TodayView = {
   neededToday: number;
   /** 지금 페이스로 목표를 맞추려면 언제 퇴근하면 되는지 */
   leaveAt: Date | null;
+  /** 그 시각이 다음 날로 넘어가는지 */
+  leaveCrossesMidnight: boolean;
   /** 오늘이 영업일이 아니거나 이미 목표를 채웠다 */
   note: string | null;
   /** 지난 날 종료를 깜빡한 근무. 있으면 새 근무를 시작할 수 없다. */
@@ -69,7 +71,13 @@ export function TodayCard({ view }: { view: TodayView }) {
             period 를 붙여야 한다. 방치된 세션이 지난 정산기간에 있으면
             기본(이번 기간) 화면에는 그 날이 없어서 종료 폼도 안 보인다.
           */}
-          <Link href={`/records?period=${view.dangling.workDate}`}>
+          {/*
+            period 로 그 정산기간을, 해시로 그 날 카드까지 내려간다. 링크가
+            페이지 맨 위에 떨어뜨리면 2천 픽셀을 스크롤해서 찾아야 한다.
+          */}
+          <Link
+            href={`/records?period=${view.dangling.workDate}#${view.dangling.workDate}`}
+          >
             기록에서 종료 시각 넣기
           </Link>
         </p>
@@ -90,9 +98,16 @@ export function TodayCard({ view }: { view: TodayView }) {
             <span className="dot" aria-hidden="true" />
             근무 중
           </div>
+          {/*
+            자정을 넘기는 시각을 "03:36에 종료하면"이라고만 쓰면 새벽 3시까지
+            일하라는 말로 읽힌다. 오늘 안에 못 채우는 건 정상이므로(정산은
+            기간 총량 기준) 그렇다고 말하고 남은 날에 나누게 한다.
+          */}
           <div className="note">
             {view.leaveAt
-              ? `${clock(view.leaveAt)}에 종료하면 오늘 몫(${hm(view.neededToday)})을 채웁니다.`
+              ? view.leaveCrossesMidnight
+                ? `오늘 몫(${hm(view.neededToday)})을 다 채우려면 다음 날 ${clock(view.leaveAt)}까지 걸립니다. 정산은 기간 총량 기준이니 남은 날에 나눠도 됩니다.`
+                : `${clock(view.leaveAt)}에 종료하면 오늘 몫(${hm(view.neededToday)})을 채웁니다.`
               : (view.note ?? "오늘 채울 몫은 없습니다.")}
           </div>
           <form action={stopWorkAction} style={{ marginTop: 16 }}>

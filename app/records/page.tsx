@@ -1,5 +1,5 @@
 import { DateTime } from "luxon";
-import { loadOrgRules, loadWorkDays } from "@/db/access";
+import { loadOrgRules, loadTimeOff, loadWorkDays } from "@/db/access";
 import { listAdjustments } from "@/db/adjust";
 import { isPeriodClosed } from "@/db/close";
 import { estimateFor } from "@/db/baseline";
@@ -28,6 +28,13 @@ const SOURCE_LABEL = {
   badge: "사원증 기록",
   import: "가져온 기록",
   manual: "직접 입력",
+} as const;
+
+const OFF_LABEL = {
+  full: "연차",
+  half_am: "오전 반차",
+  half_pm: "오후 반차",
+  unpaid: "무급휴가",
 } as const;
 
 const KIND_LABEL = {
@@ -75,19 +82,34 @@ export default async function RecordsPage({
     range.end,
     rules,
   );
+  /**
+   * 휴가.
+   *
+   * 안 보여주면 연차 쓴 날이 "기록 없음"으로 나오고 화면이 보정하라고 권한다.
+   * 쉬었다고 신고한 사람에게 근무 시간을 적으라고 하는 셈이다.
+   */
+  const off = new Map(
+    (await loadTimeOff(viewer, viewer.id, range)).map((o) => [o.date, o]),
+  );
 
   const byDate = new Map<string, ComputedDay>(days.map((d) => [d.workDate, d]));
   const adjustedDates = new Set(
     history.filter((h) => h.kind !== "revert").map((h) => h.workDate),
   );
 
-  const dates: string[] = [];
+  const allDates: string[] = [];
   let cursor = DateTime.fromISO(range.start, { zone });
   const last = DateTime.fromISO(range.end, { zone });
   while (cursor <= last) {
-    dates.push(cursor.toISODate()!);
+    allDates.push(cursor.toISODate()!);
     cursor = cursor.plus({ days: 1 });
   }
+  /*
+   * 이 화면의 목적은 "고칠 날 찾기"다. 아직 오지 않은 날을 카드로 늘어놓으면
+   * 화면 대부분이 "아직 오지 않은 날입니다"가 된다. 주의 모양은 대시보드가 준다.
+   */
+  const dates = allDates.filter((d) => d <= today);
+  const upcoming = allDates.filter((d) => d > today);
 
   const time = (d: Date | null) =>
     d ? DateTime.fromJSDate(d, { zone }).toFormat("HH:mm") : "";
@@ -165,7 +187,14 @@ export default async function RecordsPage({
         const day = byDate.get(date);
         const dt = DateTime.fromISO(date, { zone });
         const dow = WEEKDAY[dt.weekday - 1];
-        const needsFix = !day || day.status === "incomplete";
+        const dayOff = off.get(date);
+        /**
+         * 온종일 휴가면 손댈 게 없다. 반차는 반나절 근무가 있으므로 보정 대상이다.
+         * 휴가일에 기록이 있으면 그건 "휴가일 근무"로 따로 걸린다(정산에서 판정).
+         */
+        const fullDayOff = dayOff?.kind === "full" || dayOff?.kind === "unpaid";
+        const needsFix =
+          !fullDayOff && (!day || day.status === "incomplete");
         const wasAdjusted = adjustedDates.has(date);
         const daySessions = sessions.get(date) ?? [];
         /**
@@ -180,7 +209,8 @@ export default async function RecordsPage({
         const dangling = toClose.length > 0;
 
         return (
-          <section className="card" key={date}>
+          // id 를 둬서 대시보드에서 "그 날"로 바로 내려올 수 있게 한다
+          <section className="card" key={date} id={date}>
             <div className="day-head">
               <strong>
                 {dt.toFormat("M월 d일")} ({dow})
@@ -202,6 +232,9 @@ export default async function RecordsPage({
                 )
               ) : (
                 <span className="day-sum none">기록 없음</span>
+              )}
+              {dayOff && (
+                <span className="tag">{OFF_LABEL[dayOff.kind]}</span>
               )}
               {day?.status === "open" && (
                 <span className="status good inline">
@@ -289,8 +322,29 @@ export default async function RecordsPage({
               </p>
             )}
 
-            {!closed && (
-              <>
+            {/*
+              아직 오지 않은 날에는 보정할 것이 없다.
+              폼을 열어두면 8월 2일 근무를 미리 신고할 수 있고, 안 지난 날 6개가
+              화면 길이를 세 배로 늘린다.
+            */}
+            {!closed && fullDayOff && !day && (
+              <p className="empty">
+                {OFF_LABEL[dayOff.kind]}로 등록된 날입니다. 소정근로에서 이미
+                빠져 있으니 따로 보정할 것이 없습니다.
+              </p>
+            )}
+
+            {/*
+              지난 날에 손댈 게 있으면 펼쳐 둔다. 오늘은 아직 근무 중일 수
+              있으니 먼저 펼치지 않는다 — 시작하지도 않은 날에 보정 폼이
+              열려 있으면 "여기에 시간을 적으라"는 말로 읽힌다.
+            */}
+            {!closed && !(fullDayOff && !day) && (
+              <details className="adjust-box" open={needsFix && date < today}>
+                <summary>
+                  {needsFix && date < today ? "이 날 보정하기" : "시각 정정"}
+                  {wasAdjusted && " · 보정 이력 있음"}
+                </summary>
                 <form action={recordsAction} className="adjust">
                   <input type="hidden" name="op" value="adjust" />
                   <input type="hidden" name="workDate" value={date} />
@@ -338,11 +392,20 @@ export default async function RecordsPage({
                     </button>
                   </form>
                 )}
-              </>
+              </details>
             )}
           </section>
         );
       })}
+
+      {upcoming.length > 0 && (
+        <p className="empty" style={{ margin: "0 0 14px 4px" }}>
+          {DateTime.fromISO(upcoming[0], { zone }).toFormat("M월 d일")}
+          {upcoming.length > 1 &&
+            ` ~ ${DateTime.fromISO(upcoming.at(-1)!, { zone }).toFormat("M월 d일")}`}
+          은 아직 오지 않았습니다.
+        </p>
+      )}
 
       <section className="card">
         <h2>보정 이력</h2>

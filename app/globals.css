@@ -789,6 +789,22 @@ td.none {
     display: none;
   }
 }
+/*
+ * 표 안의 링크는 손가락으로 누른다.
+ * 글자 높이(15px)만큼만 누를 수 있으면 옆 행이 눌린다.
+ */
+td a {
+  display: inline-block;
+  padding: 6px 2px;
+  margin: -6px -2px;
+  min-height: 24px;
+}
+@media (max-width: 700px) {
+  td a {
+    padding: 11px 4px;
+    margin: -11px -4px;
+  }
+}
 
 .tag {
   display: inline-block;
@@ -993,6 +1009,38 @@ button.pill:hover {
 .sessions .none {
   font-size: 12px;
   color: var(--ink-3);
+}
+
+/*
+ * 보정 폼은 접어 둔다.
+ *
+ * 7일을 항상 펼쳐 두면 기록 화면이 5천 픽셀이 되고, 그 대부분이 아무도 안 쓰는
+ * 빈 칸이다. 손댈 게 있는 날만 펼치고 나머지는 한 줄로 접는다.
+ */
+.adjust-box {
+  margin-top: 12px;
+}
+.adjust-box > summary {
+  cursor: pointer;
+  display: inline-block;
+  font-size: 12.5px;
+  font-weight: 600;
+  color: var(--ink-2);
+  padding: 6px 12px;
+  border-radius: var(--radius-pill);
+  border: 1px solid var(--line-strong);
+  background: var(--surface);
+  list-style: none;
+}
+.adjust-box > summary::-webkit-details-marker {
+  display: none;
+}
+.adjust-box > summary:hover {
+  color: var(--ink);
+  background: var(--surface-2);
+}
+.adjust-box[open] > summary {
+  margin-bottom: 12px;
 }
 
 .adjust {
