@@ -196,7 +196,7 @@ describe("실근무 집계", () => {
 
 // ─────────────────────────────────────────────────────────────
 describe("페이스 — 누적 시간보다 이게 1급 지표다", () => {
-  it("수요일까지 3일 경과, 정확히 페이스대로면 on_track", () => {
+  it("오늘은 경과에서 뺀다 — 수요일에 보면 월·화까지로 판정", () => {
     const days = ["03-02", "03-03", "03-04"].map((md) =>
       d(`2026-${md}`, 8 * 60),
     );
@@ -205,10 +205,41 @@ describe("페이스 — 누적 시간보다 이게 1급 지표다", () => {
       base,
     );
 
-    expect(s.elapsedBusinessDays).toBe(3);
-    expect(s.elapsedTargetMinutes).toBe(24 * 60);
+    expect(s.elapsedBusinessDays).toBe(2);
+    expect(s.elapsedTargetMinutes).toBe(16 * 60);
+    // 수요일 실적은 누적에는 들어가고 페이스 판정에서는 빠진다
+    expect(s.workedMinutes).toBe(24 * 60);
+    expect(s.pacedWorkedMinutes).toBe(16 * 60);
     expect(s.paceStatus).toBe("on_track");
     expect(s.projectedMinutes).toBe(40 * 60);
+  });
+
+  it("금요일 아침에 봐도 뒤처졌다고 하지 않는다", () => {
+    // 월~목 8시간씩 채웠고 금요일은 아직 시작 전.
+    // 금요일을 경과로 세면 8시간 부족으로 나오는 버그가 있었다.
+    const days = ["03-02", "03-03", "03-04", "03-05"].map((md) =>
+      d(`2026-${md}`, 8 * 60),
+    );
+    const s = computePeriodSummary(
+      week({ days, asOf: "2026-03-06T09:00" }),
+      base,
+    );
+
+    expect(s.elapsedTargetMinutes).toBe(32 * 60);
+    expect(s.paceStatus).toBe("on_track");
+    expect(s.projectedMinutes).toBe(40 * 60);
+    // 남은 시간은 그대로 8시간
+    expect(s.remainingMinutes).toBe(8 * 60);
+  });
+
+  it("첫날에 보면 경과가 0이다", () => {
+    const s = computePeriodSummary(
+      week({ days: [d("2026-03-02", 4 * 60)], asOf: "2026-03-02T13:00" }),
+      base,
+    );
+
+    expect(s.elapsedBusinessDays).toBe(0);
+    expect(s.paceStatus).toBe("on_track");
   });
 
   it("하루 6시간씩이면 behind, 월말 예상치도 낮게 나온다", () => {
@@ -252,7 +283,8 @@ describe("페이스 — 누적 시간보다 이게 1급 지표다", () => {
   });
 
   it("휴가가 낀 주는 페이스가 왜곡되지 않는다", () => {
-    // 화요일 연차. 월·수 8시간씩 = 16h, 경과 목표도 16h(24h - 연차 8h)
+    // 화요일 연차. 수요일에 보면 경과는 월·화 2일이지만 연차 8h가 빠져 목표 8h.
+    // 월요일 실적 8h와 정확히 맞는다.
     const days = [d("2026-03-02", 8 * 60), d("2026-03-04", 8 * 60)];
     const s = computePeriodSummary(
       week({
@@ -265,7 +297,8 @@ describe("페이스 — 누적 시간보다 이게 1급 지표다", () => {
       base,
     );
 
-    expect(s.elapsedTargetMinutes).toBe(16 * 60);
+    expect(s.elapsedTargetMinutes).toBe(8 * 60);
+    expect(s.pacedWorkedMinutes).toBe(8 * 60);
     expect(s.paceStatus).toBe("on_track");
     expect(s.targetMinutes).toBe(32 * 60);
     expect(s.projectedMinutes).toBe(32 * 60);

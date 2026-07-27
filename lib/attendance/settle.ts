@@ -70,8 +70,10 @@ export type PeriodSummary = {
 
   /** 페이스 — 누적 시간보다 이게 1급 지표다 */
   elapsedBusinessDays: number;
-  /** 경과한 영업일까지 채웠어야 하는 시간 */
+  /** 경과한 영업일까지 채웠어야 하는 시간 (오늘 제외) */
   elapsedTargetMinutes: number;
+  /** 페이스 판정에 쓴 실적 (오늘 제외). workedMinutes와 다를 수 있다 */
+  pacedWorkedMinutes: number;
   /** 현재 페이스대로면 기간 말에 도달할 시간 */
   projectedMinutes: number;
   paceStatus: PaceStatus;
@@ -219,20 +221,22 @@ export function computePeriodSummary(
     .reduce((s, d) => s + d.workMinutes, 0);
 
   // ── 페이스 ──
-  // asOf를 기간 안으로 자른다. 기간 종료 후에 보면 전체가 경과한 것으로 본다.
+  //
+  // 오늘은 아직 진행 중이므로 페이스 판정에서 제외한다. 오늘을 경과로 세면
+  // 아침에는 항상 "뒤처짐", 저녁에는 "앞섬"으로 나와서 지표를 믿을 수 없게 된다.
+  // 오늘 실적은 누적(workedMinutes)에는 그대로 들어간다.
   const asOfDate = DateTime.fromJSDate(asOf, { zone }).toISODate()!;
-  const clamped =
+  const paceCutoff =
     asOfDate < periodStart
       ? null
       : asOfDate > periodEnd
         ? periodEnd
-        : asOfDate;
+        : DateTime.fromISO(asOfDate, { zone }).minus({ days: 1 }).toISODate()!;
 
-  const elapsedBusinessDates = clamped
-    ? businessDates.filter((d) => d <= clamped)
-    : [];
+  const elapsedBusinessDates =
+    paceCutoff !== null ? businessDates.filter((d) => d <= paceCutoff) : [];
   const elapsedTimeOffDeduct = periodTimeOff
-    .filter((t) => clamped !== null && t.date <= clamped)
+    .filter((t) => paceCutoff !== null && t.date <= paceCutoff)
     .reduce((s, t) => s + t.deductMinutes, 0);
 
   const elapsedTargetMinutes = Math.max(
@@ -241,14 +245,21 @@ export function computePeriodSummary(
       elapsedTimeOffDeduct,
   );
 
+  /** 페이스 판정에 쓰는 실적 — 오늘 이전까지 */
+  const pacedWorkedMinutes = counted
+    .filter((d) => paceCutoff !== null && d.workDate <= paceCutoff)
+    .reduce((s, d) => s + d.workMinutes, 0);
+
   // 목표에 대한 비율로 투사한다. 휴가가 목표에서 이미 빠져 있으므로
   // 휴가 낀 기간에도 페이스가 왜곡되지 않는다.
+  // 나눗셈을 마지막에 둔다. 먼저 나누면 부동소수점 때문에 헤드라인 숫자가
+  // 1분씩 깎인다 (1438/1920*2400 → 1797.4999…).
   const projectedMinutes =
     elapsedTargetMinutes > 0
-      ? Math.round((workedMinutes / elapsedTargetMinutes) * targetMinutes)
+      ? Math.round((pacedWorkedMinutes * targetMinutes) / elapsedTargetMinutes)
       : workedMinutes;
 
-  const gap = workedMinutes - elapsedTargetMinutes;
+  const gap = pacedWorkedMinutes - elapsedTargetMinutes;
   const paceStatus: PaceStatus =
     gap > rules.paceToleranceMinutes
       ? "ahead"
@@ -305,6 +316,7 @@ export function computePeriodSummary(
     holidayMinutes,
     elapsedBusinessDays: elapsedBusinessDates.length,
     elapsedTargetMinutes,
+    pacedWorkedMinutes,
     projectedMinutes,
     paceStatus,
     avgWeeklyMinutes,
