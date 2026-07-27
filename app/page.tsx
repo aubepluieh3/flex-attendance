@@ -73,19 +73,45 @@ export default function Page() {
   const dates = eachDate(demoPeriod.start, demoPeriod.end);
   const byDate = new Map<string, ComputedDay>(days.map((d) => [d.workDate, d]));
 
-  const pace = {
-    on_track: { cls: "good", text: "정상 페이스" },
-    ahead: { cls: "good", text: "앞서감" },
-    behind: { cls: "warn", text: "뒤처짐" },
-  }[summary.paceStatus];
-
   const paceGap = summary.projectedMinutes - summary.targetMinutes;
   const paceNote =
     summary.paceStatus === "behind"
-      ? `이대로면 목표까지 ${hm(-paceGap)} 부족합니다.`
+      ? `이 페이스면 ${hm(-paceGap)} 부족`
       : summary.paceStatus === "ahead"
-        ? `목표보다 ${hm(paceGap)} 더 일하게 됩니다.`
-        : "목표대로 가고 있습니다.";
+        ? `이 페이스면 ${hm(paceGap)} 초과`
+        : "목표대로 가고 있음";
+
+  /**
+   * 주 정산에서는 "남은 시간 / 남은 일수"가 페이스보다 직관적이다.
+   * 남은 일수가 1~5일이면 사람이 머리로 나눌 수 있고, "하루 몇 시간"이
+   * 바로 행동 신호가 된다. 페이스는 정산기간이 월일 때 값어치가 생긴다.
+   */
+  const asOfDate = DateTime.fromJSDate(demoNow, { zone: DEMO_ZONE }).toISODate()!;
+  const remainingBusinessDates = dates.filter((date) => {
+    if (date < asOfDate) return false;
+    const dt = DateTime.fromISO(date, { zone: DEMO_ZONE });
+    return (
+      !demoAttendanceRules.weekendDays.includes(dt.weekday) &&
+      !demoAttendanceRules.holidays.includes(date)
+    );
+  });
+
+  const requiredPerDay =
+    summary.remainingBusinessDays > 0
+      ? Math.ceil(summary.remainingMinutes / summary.remainingBusinessDays)
+      : 0;
+  const dailyLimit = demoAttendanceRules.dailyLimitMinutes;
+  const unreachable =
+    dailyLimit !== null &&
+    summary.remainingMinutes > 0 &&
+    requiredPerDay > dailyLimit;
+
+  const remainingLabel =
+    summary.remainingBusinessDays === 0
+      ? "영업일이 모두 지났습니다"
+      : summary.remainingBusinessDays === 1
+        ? `${label(remainingBusinessDates[0]).dow}요일 하루 남음 — 하루 ${hm(requiredPerDay)} 필요`
+        : `영업일 ${summary.remainingBusinessDays}일 남음 — 하루 ${hm(requiredPerDay)} 필요`;
 
   const meterPct = summary.targetMinutes
     ? Math.min(100, (summary.workedMinutes / summary.targetMinutes) * 100)
@@ -119,15 +145,34 @@ export default function Page() {
         </span>
       </p>
 
-      {/* 페이스 — 누적 시간보다 이게 1급 지표다 */}
+      {/* 남은 시간 — 실제로 존재하는 숫자를 1급으로 둔다 */}
       <section className="card hero">
-        <div className="label">이 페이스면 이번 주</div>
-        <div className="figure">{hm(summary.projectedMinutes)}</div>
-        <div className={`status ${pace.cls}`}>
-          <span className="dot" aria-hidden="true" />
-          {pace.text}
-        </div>
-        <div className="note">{paceNote}</div>
+        {summary.remainingMinutes === 0 ? (
+          <>
+            <div className="label">이번 주 소정근로</div>
+            <div className="figure">채웠습니다</div>
+            <div className="status good">
+              <span className="dot" aria-hidden="true" />
+              목표 달성
+            </div>
+            <div className="note">
+              누적 {hm(summary.workedMinutes)} / 목표{" "}
+              {hm(summary.targetMinutes)}
+            </div>
+          </>
+        ) : (
+          <>
+            <div className="label">남은 시간</div>
+            <div className="figure">{hm(summary.remainingMinutes)}</div>
+            {unreachable && (
+              <div className="status warn">
+                <span className="dot" aria-hidden="true" />
+                1일 상한 {hm(dailyLimit!)}을 넘습니다
+              </div>
+            )}
+            <div className="note">{remainingLabel}</div>
+          </>
+        )}
       </section>
 
       <section className="card">
@@ -141,8 +186,11 @@ export default function Page() {
             <div className="v">{hm(summary.targetMinutes)}</div>
           </div>
           <div className="tile">
-            <div className="k">남은 시간</div>
-            <div className="v">{hm(summary.remainingMinutes)}</div>
+            <div className="k">이 페이스면</div>
+            <div className="v">{hm(summary.projectedMinutes)}</div>
+            <div className="k" style={{ marginTop: 2 }}>
+              {paceNote}
+            </div>
           </div>
           <div className="tile">
             <div className="k">야간 근무</div>

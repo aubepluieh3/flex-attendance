@@ -232,6 +232,34 @@ describe("페이스 — 누적 시간보다 이게 1급 지표다", () => {
     expect(s.remainingMinutes).toBe(8 * 60);
   });
 
+  it("남은 영업일은 오늘을 포함한다 — 주 정산에서 페이스보다 직관적이다", () => {
+    const days = ["03-02", "03-03", "03-04", "03-05"].map((md) =>
+      d(`2026-${md}`, 8 * 60),
+    );
+
+    // 금요일 오전: 금요일 하루 남음
+    const friday = computePeriodSummary(
+      week({ days, asOf: "2026-03-06T09:00" }),
+      base,
+    );
+    expect(friday.remainingBusinessDays).toBe(1);
+    expect(friday.remainingMinutes).toBe(8 * 60);
+
+    // 토요일: 영업일이 다 지났다
+    const saturday = computePeriodSummary(
+      week({ days, asOf: "2026-03-07T09:00" }),
+      base,
+    );
+    expect(saturday.remainingBusinessDays).toBe(0);
+
+    // 첫날 아침: 5일 다 남았다
+    const monday = computePeriodSummary(
+      week({ days: [], asOf: "2026-03-02T09:00" }),
+      base,
+    );
+    expect(monday.remainingBusinessDays).toBe(5);
+  });
+
   it("첫날에 보면 경과가 0이다", () => {
     const s = computePeriodSummary(
       week({ days: [d("2026-03-02", 4 * 60)], asOf: "2026-03-02T13:00" }),

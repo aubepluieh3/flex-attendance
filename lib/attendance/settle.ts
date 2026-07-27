@@ -68,8 +68,13 @@ export type PeriodSummary = {
   nightMinutes: number;
   holidayMinutes: number;
 
-  /** 페이스 — 누적 시간보다 이게 1급 지표다 */
   elapsedBusinessDays: number;
+  /**
+   * 남은 영업일 (오늘 포함).
+   * 주 정산에서는 이게 페이스보다 직관적이다 — 남은 일수가 1~5일이면
+   * 사람이 머리로 나눌 수 있고, "하루 몇 시간"이 바로 행동 신호가 된다.
+   */
+  remainingBusinessDays: number;
   /** 경과한 영업일까지 채웠어야 하는 시간 (오늘 제외) */
   elapsedTargetMinutes: number;
   /** 페이스 판정에 쓴 실적 (오늘 제외). workedMinutes와 다를 수 있다 */
@@ -315,6 +320,7 @@ export function computePeriodSummary(
     nightMinutes,
     holidayMinutes,
     elapsedBusinessDays: elapsedBusinessDates.length,
+    remainingBusinessDays: businessDates.length - elapsedBusinessDates.length,
     elapsedTargetMinutes,
     pacedWorkedMinutes,
     projectedMinutes,
