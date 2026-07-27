@@ -1,16 +1,17 @@
 import { DateTime } from "luxon";
-import { computeWorkDays } from "@/lib/attendance/compute";
 import { computePeriodSummary } from "@/lib/attendance/settle";
+import { resolvePeriod } from "@/lib/attendance/period";
 import type { ComputedDay, DayFlag } from "@/lib/attendance/types";
+import { isDemoClock, now } from "@/lib/clock";
 import {
-  DEMO_ZONE,
-  demoAttendanceRules,
-  demoEmployee,
-  demoNow,
-  demoPeriod,
-  demoSettlementRules,
-  demoTags,
-} from "@/lib/seed";
+  currentViewer,
+  loadOrgRules,
+  loadTimeOff,
+  loadWorkDays,
+} from "@/db/access";
+
+// DB를 읽으므로 빌드 시점에 프리렌더하지 않는다
+export const dynamic = "force-dynamic";
 
 /** 차트 y축 최대 (10시간). 1일 소정근로 8시간 기준선을 그린다. */
 const SCALE_MINUTES = 10 * 60;
@@ -36,15 +37,13 @@ function hm(minutes: number): string {
   return `${sign}${h}시간 ${m}분`;
 }
 
-function clock(date: Date | null): string | null {
-  if (!date) return null;
-  return DateTime.fromJSDate(date, { zone: DEMO_ZONE }).toFormat("HH:mm");
-}
+const clock = (date: Date | null, zone: string) =>
+  date ? DateTime.fromJSDate(date, { zone }).toFormat("HH:mm") : null;
 
-function eachDate(start: string, end: string): string[] {
+function eachDate(start: string, end: string, zone: string): string[] {
   const out: string[] = [];
-  let cursor = DateTime.fromISO(start, { zone: DEMO_ZONE });
-  const last = DateTime.fromISO(end, { zone: DEMO_ZONE });
+  let cursor = DateTime.fromISO(start, { zone });
+  const last = DateTime.fromISO(end, { zone });
   while (cursor <= last) {
     out.push(cursor.toISODate()!);
     cursor = cursor.plus({ days: 1 });
@@ -52,25 +51,39 @@ function eachDate(start: string, end: string): string[] {
   return out;
 }
 
-const label = (date: string) => {
-  const dt = DateTime.fromISO(date, { zone: DEMO_ZONE });
+const label = (date: string, zone: string) => {
+  const dt = DateTime.fromISO(date, { zone });
   return { md: dt.toFormat("M/d"), dow: WEEKDAY[dt.weekday - 1] };
 };
 
-export default function Page() {
-  const days = computeWorkDays(demoTags, demoAttendanceRules);
+export default async function Page() {
+  const viewer = await currentViewer();
+  const rules = await loadOrgRules(viewer.orgId);
+  const zone = rules.attendance.timezone;
+
+  const asOf = now();
+  const asOfDate = DateTime.fromJSDate(asOf, { zone }).toISODate()!;
+  const range = resolvePeriod(asOfDate, {
+    kind: rules.settlementKind,
+    weekStartDay: rules.weekStartDay,
+    timezone: zone,
+  });
+
+  const days = await loadWorkDays(viewer, viewer.id, range);
+  const off = await loadTimeOff(viewer, viewer.id, range);
+
   const summary = computePeriodSummary(
     {
-      periodStart: demoPeriod.start,
-      periodEnd: demoPeriod.end,
+      periodStart: range.start,
+      periodEnd: range.end,
       days,
-      timeOff: [],
-      asOf: demoNow,
+      timeOff: off,
+      asOf,
     },
-    demoSettlementRules,
+    rules.settlement,
   );
 
-  const dates = eachDate(demoPeriod.start, demoPeriod.end);
+  const dates = eachDate(range.start, range.end, zone);
   const byDate = new Map<string, ComputedDay>(days.map((d) => [d.workDate, d]));
 
   const paceGap = summary.projectedMinutes - summary.targetMinutes;
@@ -86,13 +99,12 @@ export default function Page() {
    * 남은 일수가 1~5일이면 사람이 머리로 나눌 수 있고, "하루 몇 시간"이
    * 바로 행동 신호가 된다. 페이스는 정산기간이 월일 때 값어치가 생긴다.
    */
-  const asOfDate = DateTime.fromJSDate(demoNow, { zone: DEMO_ZONE }).toISODate()!;
   const remainingBusinessDates = dates.filter((date) => {
     if (date < asOfDate) return false;
-    const dt = DateTime.fromISO(date, { zone: DEMO_ZONE });
+    const dt = DateTime.fromISO(date, { zone });
     return (
-      !demoAttendanceRules.weekendDays.includes(dt.weekday) &&
-      !demoAttendanceRules.holidays.includes(date)
+      !rules.attendance.weekendDays.includes(dt.weekday) &&
+      !rules.attendance.holidays.includes(date)
     );
   });
 
@@ -100,7 +112,7 @@ export default function Page() {
     summary.remainingBusinessDays > 0
       ? Math.ceil(summary.remainingMinutes / summary.remainingBusinessDays)
       : 0;
-  const dailyLimit = demoAttendanceRules.dailyLimitMinutes;
+  const dailyLimit = rules.attendance.dailyLimitMinutes;
   const unreachable =
     dailyLimit !== null &&
     summary.remainingMinutes > 0 &&
@@ -110,38 +122,31 @@ export default function Page() {
     summary.remainingBusinessDays === 0
       ? "영업일이 모두 지났습니다"
       : summary.remainingBusinessDays === 1
-        ? `${label(remainingBusinessDates[0]).dow}요일 하루 남음 — 하루 ${hm(requiredPerDay)} 필요`
+        ? `${label(remainingBusinessDates[0], zone).dow}요일 하루 남음 — 하루 ${hm(requiredPerDay)} 필요`
         : `영업일 ${summary.remainingBusinessDays}일 남음 — 하루 ${hm(requiredPerDay)} 필요`;
 
-  const meterPct = summary.targetMinutes
-    ? Math.min(100, (summary.workedMinutes / summary.targetMinutes) * 100)
-    : 0;
-
-  const period = {
-    from: DateTime.fromISO(demoPeriod.start, { zone: DEMO_ZONE }),
-    to: DateTime.fromISO(demoPeriod.end, { zone: DEMO_ZONE }),
-  };
-  const importedThrough = DateTime.fromJSDate(demoNow, { zone: DEMO_ZONE })
+  const core = rules.attendance.coreTime;
+  const from = DateTime.fromISO(range.start, { zone });
+  const to = DateTime.fromISO(range.end, { zone });
+  const importedThrough = DateTime.fromJSDate(asOf, { zone })
     .minus({ days: 1 })
     .toFormat("M월 d일");
 
   return (
     <main className="page">
       <div className="head">
-        <h1>{demoEmployee.name}</h1>
-        <span className="team">{demoEmployee.team}</span>
-        <span className="chip">데모 데이터</span>
+        <h1>{viewer.name}</h1>
+        <span className="team">{viewer.teamName ?? rules.orgName}</span>
+        {isDemoClock() && <span className="chip">데모 시계</span>}
       </div>
       <p className="sub">
-        {period.from.toFormat("yyyy년 M월 d일")}(
-        {WEEKDAY[period.from.weekday - 1]}) ~ {period.to.toFormat("M월 d일")}(
-        {WEEKDAY[period.to.weekday - 1]}) · 주 단위 정산
+        {from.toFormat("yyyy년 M월 d일")}({WEEKDAY[from.weekday - 1]}) ~{" "}
+        {to.toFormat("M월 d일")}({WEEKDAY[to.weekday - 1]}) ·{" "}
+        {rules.settlementKind === "week" ? "주" : "월"} 단위 정산
         <br />
         <span className="dim">
-          {DateTime.fromJSDate(demoNow, { zone: DEMO_ZONE }).toFormat(
-            "M월 d일 HH:mm",
-          )}{" "}
-          기준 · 근태 기록은 {importedThrough}까지 반영됨
+          {DateTime.fromJSDate(asOf, { zone }).toFormat("M월 d일 HH:mm")} 기준 ·
+          근태 기록은 {importedThrough}까지 반영됨
         </span>
       </p>
 
@@ -149,7 +154,7 @@ export default function Page() {
       <section className="card hero">
         {summary.remainingMinutes === 0 ? (
           <>
-            <div className="label">이번 주 소정근로</div>
+            <div className="label">이번 정산기간 소정근로</div>
             <div className="figure">채웠습니다</div>
             <div className="status good">
               <span className="dot" aria-hidden="true" />
@@ -198,7 +203,18 @@ export default function Page() {
           </div>
         </div>
         <div className="meter">
-          <span style={{ width: `${meterPct}%` }} />
+          <span
+            style={{
+              width: `${
+                summary.targetMinutes
+                  ? Math.min(
+                      100,
+                      (summary.workedMinutes / summary.targetMinutes) * 100,
+                    )
+                  : 0
+              }%`,
+            }}
+          />
         </div>
         <div className="meter-legend">
           <span>{hm(summary.workedMinutes)}</span>
@@ -210,6 +226,7 @@ export default function Page() {
         <h2>확인 필요</h2>
         {summary.incompleteDates.length === 0 &&
         summary.flaggedDates.length === 0 &&
+        summary.timeOffConflicts.length === 0 &&
         !summary.exceedsAvgWeeklyLimit ? (
           <p className="empty">확인할 항목이 없습니다.</p>
         ) : (
@@ -230,7 +247,7 @@ export default function Page() {
               </li>
             )}
             {summary.incompleteDates.map((date) => {
-              const l = label(date);
+              const l = label(date, zone);
               const d = byDate.get(date);
               return (
                 <li key={date}>
@@ -243,15 +260,15 @@ export default function Page() {
                     </span>
                     <br />
                     <span className="why">
-                      {clock(d?.firstInAt ?? null)} 출근 기록만 있습니다. 집계에서
-                      빠져 있으니 퇴근 시각을 보정해 주세요.
+                      {clock(d?.firstInAt ?? null, zone)} 출근 기록만 있습니다.
+                      집계에서 빠져 있으니 퇴근 시각을 보정해 주세요.
                     </span>
                   </span>
                 </li>
               );
             })}
             {summary.flaggedDates.map(({ date, flags }) => {
-              const l = label(date);
+              const l = label(date, zone);
               const d = byDate.get(date);
               return (
                 <li key={`f-${date}`}>
@@ -260,12 +277,35 @@ export default function Page() {
                   </span>
                   <span>
                     <span className="what">
-                      {l.md}({l.dow}) {flags.map((f) => FLAG_LABEL[f]).join(", ")}
+                      {l.md}({l.dow}){" "}
+                      {flags.map((f) => FLAG_LABEL[f]).join(", ")}
                     </span>
                     <br />
                     <span className="why">
-                      {clock(d?.firstInAt ?? null)}~{clock(d?.lastOutAt ?? null)}{" "}
-                      근무 · 의무근로시간대는 11:00~15:00입니다.
+                      {clock(d?.firstInAt ?? null, zone)}~
+                      {clock(d?.lastOutAt ?? null, zone)} 근무
+                      {core
+                        ? ` · 의무근로시간대는 ${core.start}~${core.end}입니다.`
+                        : ""}
+                    </span>
+                  </span>
+                </li>
+              );
+            })}
+            {summary.timeOffConflicts.map((date) => {
+              const l = label(date, zone);
+              return (
+                <li key={`t-${date}`}>
+                  <span className="icon warn" aria-hidden="true">
+                    !
+                  </span>
+                  <span>
+                    <span className="what">
+                      {l.md}({l.dow}) 휴가일에 근무 기록
+                    </span>
+                    <br />
+                    <span className="why">
+                      휴가로 등록된 날에 출입 기록이 있습니다.
                     </span>
                   </span>
                 </li>
@@ -280,15 +320,13 @@ export default function Page() {
         <div className="chart">
           <div
             className="ref"
-            style={{
-              bottom: `${(REFERENCE_MINUTES / SCALE_MINUTES) * 100}%`,
-            }}
+            style={{ bottom: `${(REFERENCE_MINUTES / SCALE_MINUTES) * 100}%` }}
           >
             <span>8시간</span>
           </div>
           {dates.map((date) => {
             const d = byDate.get(date);
-            const l = label(date);
+            const l = label(date, zone);
             if (!d) {
               return (
                 <div className="col" key={date} tabIndex={0}>
@@ -319,7 +357,7 @@ export default function Page() {
                 <div className="tip">
                   {l.md}({l.dow}) · 실근무 {hm(d.workMinutes)}
                   <br />
-                  {clock(d.firstInAt)}~{clock(d.lastOutAt)} · 휴게{" "}
+                  {clock(d.firstInAt, zone)}~{clock(d.lastOutAt, zone)} · 휴게{" "}
                   {hm(d.breakMinutes)}
                 </div>
               </div>
@@ -328,8 +366,10 @@ export default function Page() {
         </div>
         <div className="xaxis">
           {dates.map((date) => {
-            const l = label(date);
-            const weekend = ["토", "일"].includes(l.dow);
+            const l = label(date, zone);
+            const weekend = rules.attendance.weekendDays.includes(
+              DateTime.fromISO(date, { zone }).weekday,
+            );
             return (
               <div key={date} className={weekend ? "we" : undefined}>
                 {l.dow}
@@ -357,7 +397,7 @@ export default function Page() {
           <tbody>
             {dates.map((date) => {
               const d = byDate.get(date);
-              const l = label(date);
+              const l = label(date, zone);
               if (!d) {
                 return (
                   <tr key={date}>
@@ -376,8 +416,8 @@ export default function Page() {
                   <td>
                     {l.md} ({l.dow})
                   </td>
-                  <td>{clock(d.firstInAt) ?? "—"}</td>
-                  <td>{clock(d.lastOutAt) ?? "—"}</td>
+                  <td>{clock(d.firstInAt, zone) ?? "—"}</td>
+                  <td>{clock(d.lastOutAt, zone) ?? "—"}</td>
                   <td>{d.stayMinutes ? hm(d.stayMinutes) : "—"}</td>
                   <td>{d.breakMinutes ? hm(d.breakMinutes) : "—"}</td>
                   <td>

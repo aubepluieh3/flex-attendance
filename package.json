@@ -13,7 +13,8 @@
     "db:generate": "drizzle-kit generate",
     "db:migrate": "tsx db/migrate.ts",
     "db:seed": "tsx db/seed.ts",
-    "db:reset": "docker compose down -v && docker compose up -d && node -e \"setTimeout(()=>{},6000)\" && npm run db:migrate && npm run db:seed"
+    "db:reset": "docker compose down -v && docker compose up -d && node -e \"setTimeout(()=>{},6000)\" && npm run db:migrate && npm run db:seed",
+    "db:check-access": "tsx db/access.check.ts"
   },
   "dependencies": {
     "drizzle-orm": "^0.45.2",

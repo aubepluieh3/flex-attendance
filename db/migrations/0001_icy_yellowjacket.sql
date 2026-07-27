@@ -1,0 +1,2 @@
+CREATE TYPE "public"."target_calc_method" AS ENUM('business_days', 'fixed');--> statement-breakpoint
+ALTER TABLE "orgs" ADD COLUMN "target_calc_method" "target_calc_method" DEFAULT 'business_days' NOT NULL;

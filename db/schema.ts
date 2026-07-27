@@ -25,6 +25,10 @@ import {
  */
 
 export const settlementPeriod = pgEnum("settlement_period", ["week", "month"]);
+export const targetCalcMethod = pgEnum("target_calc_method", [
+  "business_days",
+  "fixed",
+]);
 
 /**
  * 직급이 아니라 역할로 나눈다. 열람 근거가 "직급이 높아서"이면 안 된다.
@@ -90,6 +94,15 @@ export const orgs = pgTable("orgs", {
     .notNull()
     .default("week"),
   weekStartDay: integer("week_start_day").notNull().default(1), // 1=월요일
+  /**
+   * 소정근로 산정 방식.
+   * business_days = 영업일 × 1일 소정근로 (기본) — 월별 영업일 차이가 반영된다.
+   * fixed = 정산기간당 고정 시간.
+   */
+  targetCalcMethod: targetCalcMethod("target_calc_method")
+    .notNull()
+    .default("business_days"),
+  /** fixed 방식에서만 쓴다 */
   targetMinutesPerPeriod: integer("target_minutes_per_period")
     .notNull()
     .default(40 * 60),
