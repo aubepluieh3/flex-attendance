@@ -1,5 +1,6 @@
 import { DateTime } from "luxon";
 import { breakMinutesFor } from "./compute";
+import { stayForWork } from "./sessions";
 import type { AttendanceRules, ComputedDay } from "./types";
 
 /**
@@ -26,18 +27,6 @@ const median = (xs: number[]): number => {
   const mid = Math.floor(s.length / 2);
   return s.length % 2 ? s[mid] : Math.round((s[mid - 1] + s[mid]) / 2);
 };
-
-/** 실근무가 목표치가 되도록 하는 체류시간 (휴게가 체류에 딸려 붙으므로 역산) */
-function stayForWork(targetWork: number, rules: AttendanceRules): number {
-  let stay = targetWork;
-  // 휴게 규칙은 계단식이라 두세 번이면 수렴한다
-  for (let i = 0; i < 4; i++) {
-    const next = targetWork + breakMinutesFor(stay, rules.breakRules);
-    if (next === stay) break;
-    stay = next;
-  }
-  return stay;
-}
 
 /**
  * @param history 같은 사람의 완료된 날들 (최근 것이 뒤에 오든 앞에 오든 무관)

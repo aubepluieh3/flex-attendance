@@ -184,12 +184,6 @@ export async function logout(token: string | undefined): Promise<void> {
  * 쓰는 동안에는 만료를 미룬다. 쿠키 만료까지 같이 늘려야 브라우저가 쿠키를
  * 버리지 않으므로, 갱신했으면 새 만료 시각을 함께 돌려준다.
  */
-export async function viewerFromToken(
-  token: string | undefined,
-): Promise<Viewer | null> {
-  return (await resolveSession(token))?.viewer ?? null;
-}
-
 export async function resolveSession(
   token: string | undefined,
 ): Promise<{ viewer: Viewer; renewedUntil: Date | null } | null> {
