@@ -1,0 +1,434 @@
+import { describe, expect, it } from "vitest";
+import { DateTime } from "luxon";
+import { computePeriodSummary } from "./settle";
+import type { SettlementRules, TimeOffEntry } from "./settle";
+import type { ComputedDay } from "./types";
+
+/**
+ * 2026-03-02(월) ~ 03-08(일) 이 기준 주.
+ * 영업일 5일 → 소정근로 40시간.
+ */
+const base: SettlementRules = {
+  timezone: "Asia/Seoul",
+  weekendDays: [6, 7],
+  holidays: [],
+  targetCalcMethod: "business_days",
+  standardMinutesPerDay: 8 * 60,
+  fixedTargetMinutes: 40 * 60,
+  legalWeeklyMinutes: 40 * 60,
+  maxAvgWeeklyMinutes: 52 * 60,
+  paceToleranceMinutes: 60,
+};
+
+const withRules = (o: Partial<SettlementRules>): SettlementRules => ({
+  ...base,
+  ...o,
+});
+
+/** 하루 집계 결과 stub. 여기서는 정산 로직만 본다. */
+const d = (
+  workDate: string,
+  workMinutes: number,
+  over: Partial<ComputedDay> = {},
+): ComputedDay => ({
+  workDate,
+  firstInAt: null,
+  lastOutAt: null,
+  stayMinutes: workMinutes,
+  breakMinutes: 0,
+  workMinutes,
+  nightMinutes: 0,
+  isHoliday: false,
+  flags: [],
+  status: "computed",
+  tagCount: 2,
+  ...over,
+});
+
+const kst = (iso: string) =>
+  DateTime.fromISO(iso, { zone: "Asia/Seoul" }).toJSDate();
+
+/** 기준 주 5영업일에 같은 시간씩 */
+const weekdays = (minutes: number) =>
+  ["03-02", "03-03", "03-04", "03-05", "03-06"].map((md) =>
+    d(`2026-${md}`, minutes),
+  );
+
+const week = (o: {
+  days?: ComputedDay[];
+  timeOff?: TimeOffEntry[];
+  asOf?: string;
+}) => ({
+  periodStart: "2026-03-02",
+  periodEnd: "2026-03-08",
+  days: o.days ?? [],
+  timeOff: o.timeOff ?? [],
+  asOf: kst(o.asOf ?? "2026-03-08T23:59"),
+});
+
+// ─────────────────────────────────────────────────────────────
+describe("소정근로 산정 — 영업일 × 8h − 휴가", () => {
+  it("평일 5일이면 40시간", () => {
+    const s = computePeriodSummary(week({}), base);
+    expect(s.businessDays).toBe(5);
+    expect(s.targetMinutes).toBe(40 * 60);
+  });
+
+  it("공휴일이 끼면 그만큼 줄어든다", () => {
+    const s = computePeriodSummary(
+      week({}),
+      withRules({ holidays: ["2026-03-04"] }),
+    );
+    expect(s.businessDays).toBe(4);
+    expect(s.targetMinutes).toBe(32 * 60);
+  });
+
+  it("연차 1일은 8시간을 차감한다", () => {
+    const s = computePeriodSummary(
+      week({
+        timeOff: [
+          { date: "2026-03-04", kind: "full", deductMinutes: 8 * 60 },
+        ],
+      }),
+      base,
+    );
+    expect(s.targetMinutes).toBe(32 * 60);
+  });
+
+  it("반차는 4시간만 차감한다", () => {
+    const s = computePeriodSummary(
+      week({
+        timeOff: [
+          { date: "2026-03-04", kind: "half_am", deductMinutes: 4 * 60 },
+        ],
+      }),
+      base,
+    );
+    expect(s.targetMinutes).toBe(36 * 60);
+  });
+
+  it("무급휴가도 소정근로에서 빠진다", () => {
+    const s = computePeriodSummary(
+      week({
+        timeOff: [
+          { date: "2026-03-04", kind: "unpaid", deductMinutes: 8 * 60 },
+        ],
+      }),
+      base,
+    );
+    expect(s.targetMinutes).toBe(32 * 60);
+  });
+
+  it("fixed 방식은 영업일 수와 무관하게 고정값을 쓴다", () => {
+    const s = computePeriodSummary(
+      week({}),
+      withRules({
+        targetCalcMethod: "fixed",
+        fixedTargetMinutes: 35 * 60,
+        holidays: ["2026-03-04"],
+      }),
+    );
+    expect(s.businessDays).toBe(4);
+    expect(s.targetMinutes).toBe(35 * 60);
+  });
+
+  it("휴가가 목표보다 많아도 음수가 되지 않는다", () => {
+    const s = computePeriodSummary(
+      week({
+        timeOff: ["03-02", "03-03", "03-04", "03-05", "03-06", "03-07"].map(
+          (md) => ({
+            date: `2026-${md}`,
+            kind: "full" as const,
+            deductMinutes: 8 * 60,
+          }),
+        ),
+      }),
+      base,
+    );
+    expect(s.targetMinutes).toBe(0);
+  });
+});
+
+// ─────────────────────────────────────────────────────────────
+describe("실근무 집계", () => {
+  it("5일 × 8시간이면 목표를 정확히 채운다", () => {
+    const s = computePeriodSummary(week({ days: weekdays(8 * 60) }), base);
+    expect(s.workedMinutes).toBe(40 * 60);
+    expect(s.remainingMinutes).toBe(0);
+  });
+
+  it("미완료 일자는 근무시간에 넣지 않고 확인 목록에 올린다", () => {
+    const days = [
+      ...weekdays(8 * 60).slice(0, 4),
+      d("2026-03-06", 0, { status: "incomplete" }),
+    ];
+    const s = computePeriodSummary(week({ days }), base);
+
+    expect(s.workedMinutes).toBe(32 * 60);
+    expect(s.remainingMinutes).toBe(8 * 60);
+    expect(s.incompleteDates).toEqual(["2026-03-06"]);
+  });
+
+  it("야간·휴일 근무시간을 따로 합산한다", () => {
+    const days = [
+      ...weekdays(8 * 60),
+      d("2026-03-07", 5 * 60, { isHoliday: true, nightMinutes: 60 }),
+    ];
+    const s = computePeriodSummary(week({ days }), base);
+
+    expect(s.workedMinutes).toBe(45 * 60);
+    expect(s.holidayMinutes).toBe(5 * 60);
+    expect(s.nightMinutes).toBe(60);
+  });
+
+  it("정산기간 밖의 날짜는 무시한다", () => {
+    const days = [...weekdays(8 * 60), d("2026-03-09", 8 * 60)];
+    const s = computePeriodSummary(week({ days }), base);
+    expect(s.workedMinutes).toBe(40 * 60);
+  });
+});
+
+// ─────────────────────────────────────────────────────────────
+describe("페이스 — 누적 시간보다 이게 1급 지표다", () => {
+  it("수요일까지 3일 경과, 정확히 페이스대로면 on_track", () => {
+    const days = ["03-02", "03-03", "03-04"].map((md) =>
+      d(`2026-${md}`, 8 * 60),
+    );
+    const s = computePeriodSummary(
+      week({ days, asOf: "2026-03-04T18:00" }),
+      base,
+    );
+
+    expect(s.elapsedBusinessDays).toBe(3);
+    expect(s.elapsedTargetMinutes).toBe(24 * 60);
+    expect(s.paceStatus).toBe("on_track");
+    expect(s.projectedMinutes).toBe(40 * 60);
+  });
+
+  it("하루 6시간씩이면 behind, 월말 예상치도 낮게 나온다", () => {
+    const days = ["03-02", "03-03", "03-04"].map((md) =>
+      d(`2026-${md}`, 6 * 60),
+    );
+    const s = computePeriodSummary(
+      week({ days, asOf: "2026-03-04T18:00" }),
+      base,
+    );
+
+    expect(s.paceStatus).toBe("behind");
+    // 18h / 24h 페이스 → 40h × 0.75 = 30h
+    expect(s.projectedMinutes).toBe(30 * 60);
+  });
+
+  it("하루 10시간씩이면 ahead", () => {
+    const days = ["03-02", "03-03", "03-04"].map((md) =>
+      d(`2026-${md}`, 10 * 60),
+    );
+    const s = computePeriodSummary(
+      week({ days, asOf: "2026-03-04T18:00" }),
+      base,
+    );
+
+    expect(s.paceStatus).toBe("ahead");
+    expect(s.projectedMinutes).toBe(50 * 60);
+  });
+
+  it("허용 오차(60분) 안이면 on_track", () => {
+    const days = [
+      d("2026-03-02", 8 * 60),
+      d("2026-03-03", 8 * 60),
+      d("2026-03-04", 7 * 60 + 15),
+    ];
+    const s = computePeriodSummary(
+      week({ days, asOf: "2026-03-04T18:00" }),
+      base,
+    );
+    expect(s.paceStatus).toBe("on_track");
+  });
+
+  it("휴가가 낀 주는 페이스가 왜곡되지 않는다", () => {
+    // 화요일 연차. 월·수 8시간씩 = 16h, 경과 목표도 16h(24h - 연차 8h)
+    const days = [d("2026-03-02", 8 * 60), d("2026-03-04", 8 * 60)];
+    const s = computePeriodSummary(
+      week({
+        days,
+        timeOff: [
+          { date: "2026-03-03", kind: "full", deductMinutes: 8 * 60 },
+        ],
+        asOf: "2026-03-04T18:00",
+      }),
+      base,
+    );
+
+    expect(s.elapsedTargetMinutes).toBe(16 * 60);
+    expect(s.paceStatus).toBe("on_track");
+    expect(s.targetMinutes).toBe(32 * 60);
+    expect(s.projectedMinutes).toBe(32 * 60);
+  });
+
+  it("기간 시작 전에 보면 경과 0, 예상치는 실적 그대로", () => {
+    const s = computePeriodSummary(
+      week({ days: [], asOf: "2026-02-25T09:00" }),
+      base,
+    );
+    expect(s.elapsedBusinessDays).toBe(0);
+    expect(s.elapsedTargetMinutes).toBe(0);
+    expect(s.projectedMinutes).toBe(0);
+  });
+
+  it("기간이 끝난 뒤에 보면 전체가 경과한 것으로 본다", () => {
+    const s = computePeriodSummary(
+      week({ days: weekdays(8 * 60), asOf: "2026-03-20T09:00" }),
+      base,
+    );
+    expect(s.elapsedBusinessDays).toBe(5);
+    expect(s.projectedMinutes).toBe(40 * 60);
+    expect(s.paceStatus).toBe("on_track");
+  });
+});
+
+// ─────────────────────────────────────────────────────────────
+describe("법정 한도 — 개별 주가 아니라 정산기간 평균으로 본다 (§52)", () => {
+  it("주 정산에서 53시간은 평균 52시간 초과", () => {
+    const days = [...weekdays(10 * 60), d("2026-03-07", 3 * 60)];
+    const s = computePeriodSummary(week({ days }), base);
+
+    expect(s.workedMinutes).toBe(53 * 60);
+    expect(s.avgWeeklyMinutes).toBeCloseTo(53 * 60, 5);
+    expect(s.exceedsAvgWeeklyLimit).toBe(true);
+  });
+
+  it("정확히 52시간은 초과가 아니다 (경계)", () => {
+    const days = [...weekdays(10 * 60), d("2026-03-07", 2 * 60)];
+    const s = computePeriodSummary(week({ days }), base);
+
+    expect(s.workedMinutes).toBe(52 * 60);
+    expect(s.exceedsAvgWeeklyLimit).toBe(false);
+  });
+
+  it("월 정산이면 특정 주가 60시간이어도 평균이 넘지 않으면 위법이 아니다", () => {
+    // 이게 선택근로제의 핵심이다. 주 단위로 판단하면 이 케이스를 잘못 잡는다.
+    const days = [
+      // 1주차 60시간
+      ...["03-02", "03-03", "03-04", "03-05", "03-06"].map((md) =>
+        d(`2026-${md}`, 12 * 60),
+      ),
+      // 2·3주차 40시간씩
+      ...["03-09", "03-10", "03-11", "03-12", "03-13"].map((md) =>
+        d(`2026-${md}`, 8 * 60),
+      ),
+      ...["03-16", "03-17", "03-18", "03-19", "03-20"].map((md) =>
+        d(`2026-${md}`, 8 * 60),
+      ),
+      // 4주차 24시간
+      ...["03-23", "03-24", "03-25"].map((md) => d(`2026-${md}`, 8 * 60)),
+    ];
+
+    const s = computePeriodSummary(
+      {
+        periodStart: "2026-03-01",
+        periodEnd: "2026-03-31",
+        days,
+        timeOff: [],
+        asOf: kst("2026-03-31T23:59"),
+      },
+      base,
+    );
+
+    expect(s.workedMinutes).toBe(164 * 60);
+    // 31일 / 7 = 4.43주 → 평균 약 37시간
+    expect(s.avgWeeklyMinutes / 60).toBeCloseTo(37.03, 1);
+    expect(s.exceedsAvgWeeklyLimit).toBe(false);
+    expect(s.overtimeMinutes).toBe(0);
+  });
+
+  it("정산기간 법정총량을 넘은 만큼이 연장근로다", () => {
+    // 주 정산 45시간 → 법정 40시간 초과 5시간
+    const days = [...weekdays(8 * 60), d("2026-03-07", 5 * 60)];
+    const s = computePeriodSummary(week({ days }), base);
+
+    expect(s.overtimeMinutes).toBe(5 * 60);
+  });
+
+  it("월 정산 법정총량은 일수 비례로 계산한다", () => {
+    // 31일 → 31/7 × 40h = 177.14h. 180시간 일하면 약 2.86h 연장
+    const days = Array.from({ length: 30 }, (_, i) =>
+      d(`2026-03-${String(i + 1).padStart(2, "0")}`, 6 * 60),
+    );
+    const s = computePeriodSummary(
+      {
+        periodStart: "2026-03-01",
+        periodEnd: "2026-03-31",
+        days,
+        timeOff: [],
+        asOf: kst("2026-03-31T23:59"),
+      },
+      base,
+    );
+
+    expect(s.workedMinutes).toBe(180 * 60);
+    expect(s.overtimeMinutes).toBe(Math.round(180 * 60 - (31 / 7) * 40 * 60));
+  });
+});
+
+// ─────────────────────────────────────────────────────────────
+describe("확인 필요 항목", () => {
+  it("플래그가 붙은 날을 날짜 순으로 모은다", () => {
+    const days = [
+      d("2026-03-04", 8 * 60, { flags: ["core_time_violation"] }),
+      d("2026-03-02", 13 * 60, { flags: ["over_daily_limit"] }),
+    ];
+    const s = computePeriodSummary(week({ days }), base);
+
+    expect(s.flaggedDates).toEqual([
+      { date: "2026-03-02", flags: ["over_daily_limit"] },
+      { date: "2026-03-04", flags: ["core_time_violation"] },
+    ]);
+  });
+
+  it("휴가로 등록된 날에 근무 기록이 있으면 충돌로 잡는다", () => {
+    const s = computePeriodSummary(
+      week({
+        days: weekdays(8 * 60),
+        timeOff: [
+          { date: "2026-03-04", kind: "full", deductMinutes: 8 * 60 },
+        ],
+      }),
+      base,
+    );
+
+    expect(s.timeOffConflicts).toEqual(["2026-03-04"]);
+  });
+
+  it("6일 연속 근무를 잡는다 — 주휴 미부여 위험", () => {
+    const days = [
+      ...weekdays(8 * 60),
+      d("2026-03-07", 4 * 60, { isHoliday: true }),
+    ];
+    const s = computePeriodSummary(week({ days }), base);
+
+    expect(s.maxConsecutiveWorkDays).toBe(6);
+  });
+
+  it("하루 쉬면 연속 카운트가 끊긴다", () => {
+    const days = [
+      d("2026-03-02", 8 * 60),
+      d("2026-03-03", 8 * 60),
+      d("2026-03-05", 8 * 60),
+      d("2026-03-06", 8 * 60),
+    ];
+    const s = computePeriodSummary(week({ days }), base);
+
+    expect(s.maxConsecutiveWorkDays).toBe(2);
+  });
+
+  it("근무시간이 0인 날은 연속 근무로 세지 않는다", () => {
+    const days = [
+      d("2026-03-02", 8 * 60),
+      d("2026-03-03", 0, { status: "incomplete" }),
+      d("2026-03-04", 8 * 60),
+    ];
+    const s = computePeriodSummary(week({ days }), base);
+
+    expect(s.maxConsecutiveWorkDays).toBe(1);
+  });
+});

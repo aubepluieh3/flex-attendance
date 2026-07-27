@@ -1,0 +1,248 @@
+import { DateTime } from "luxon";
+import type { ComputedDay, DayFlag } from "./types";
+
+/**
+ * 정산기간 집계.
+ *
+ * 선택적 근로시간제(§52)의 핵심: 1일 8시간 / 1주 40시간에 묶이지 않고
+ * **정산기간 총량**으로 판단한다. 따라서 연장근로도, 주 52시간 상한도
+ * 개별 주가 아니라 정산기간 평균으로 계산해야 한다.
+ *
+ * 특정 주에 60시간 일했더라도 정산기간 평균이 넘지 않으면 위법이 아니다.
+ */
+
+export type TimeOffEntry = {
+  date: string;
+  kind: "full" | "half_am" | "half_pm" | "unpaid";
+  /** 소정근로에서 빼는 분. 저장된 스냅샷 값을 그대로 쓴다. */
+  deductMinutes: number;
+};
+
+/** 소정근로 산정 방식 */
+export type TargetCalcMethod =
+  /** 영업일 × 1일 소정근로. 월별 영업일 차이가 반영된다 (기본) */
+  | "business_days"
+  /** 정산기간당 고정 시간 */
+  | "fixed";
+
+export type SettlementRules = {
+  timezone: string;
+  weekendDays: number[];
+  holidays: string[];
+  targetCalcMethod: TargetCalcMethod;
+  /** 휴가 1일이 차감하는 소정근로. business_days 방식의 기본 단위. */
+  standardMinutesPerDay: number;
+  /** fixed 방식에서 쓰는 정산기간 목표 */
+  fixedTargetMinutes: number;
+  /** 법정 주 근로시간 (40h) */
+  legalWeeklyMinutes: number;
+  /** 정산기간 **평균** 주 근로시간 상한 (52h) */
+  maxAvgWeeklyMinutes: number;
+  /** 페이스 판정 허용 오차 */
+  paceToleranceMinutes: number;
+};
+
+export type PaceStatus = "ahead" | "on_track" | "behind";
+
+export type PeriodInput = {
+  /** YYYY-MM-DD */
+  periodStart: string;
+  /** YYYY-MM-DD, 포함 */
+  periodEnd: string;
+  days: ComputedDay[];
+  timeOff: TimeOffEntry[];
+  /** 페이스 계산 기준 시각 */
+  asOf: Date;
+};
+
+export type PeriodSummary = {
+  periodStart: string;
+  periodEnd: string;
+
+  businessDays: number;
+  /** 소정근로 = 영업일 × 8h − 휴가 차감 */
+  targetMinutes: number;
+  /** 미완료 일자는 제외한 실근무 합 */
+  workedMinutes: number;
+  remainingMinutes: number;
+  nightMinutes: number;
+  holidayMinutes: number;
+
+  /** 페이스 — 누적 시간보다 이게 1급 지표다 */
+  elapsedBusinessDays: number;
+  /** 경과한 영업일까지 채웠어야 하는 시간 */
+  elapsedTargetMinutes: number;
+  /** 현재 페이스대로면 기간 말에 도달할 시간 */
+  projectedMinutes: number;
+  paceStatus: PaceStatus;
+
+  /** 정산기간 평균 주 근로시간 */
+  avgWeeklyMinutes: number;
+  /** 정산기간 총 법정근로시간을 넘은 분 = 연장근로 */
+  overtimeMinutes: number;
+  /** 평균 주 52시간 초과 — 위법 소지 */
+  exceedsAvgWeeklyLimit: boolean;
+
+  /** 확인 필요 */
+  incompleteDates: string[];
+  flaggedDates: Array<{ date: string; flags: DayFlag[] }>;
+  /** 휴가로 등록된 날에 근무 기록이 있다 */
+  timeOffConflicts: string[];
+  /** 연속 근무일 최대치. 6일 이상이면 주휴 미부여 위험 */
+  maxConsecutiveWorkDays: number;
+};
+
+function eachDate(start: string, end: string, zone: string): string[] {
+  const out: string[] = [];
+  let cursor = DateTime.fromISO(start, { zone });
+  const last = DateTime.fromISO(end, { zone });
+  while (cursor <= last) {
+    out.push(cursor.toISODate()!);
+    cursor = cursor.plus({ days: 1 });
+  }
+  return out;
+}
+
+function isBusinessDay(date: string, rules: SettlementRules): boolean {
+  if (rules.holidays.includes(date)) return false;
+  const weekday = DateTime.fromISO(date, { zone: rules.timezone }).weekday;
+  return !rules.weekendDays.includes(weekday);
+}
+
+/** 날짜가 연속인지 (YYYY-MM-DD 기준) */
+function isNextDay(prev: string, next: string, zone: string): boolean {
+  return (
+    DateTime.fromISO(prev, { zone }).plus({ days: 1 }).toISODate() === next
+  );
+}
+
+export function computePeriodSummary(
+  input: PeriodInput,
+  rules: SettlementRules,
+): PeriodSummary {
+  const { periodStart, periodEnd, days, timeOff, asOf } = input;
+  const zone = rules.timezone;
+
+  const allDates = eachDate(periodStart, periodEnd, zone);
+  const businessDates = allDates.filter((d) => isBusinessDay(d, rules));
+
+  const inPeriod = new Set(allDates);
+  const periodTimeOff = timeOff.filter((t) => inPeriod.has(t.date));
+  const timeOffDeduct = periodTimeOff.reduce(
+    (sum, t) => sum + t.deductMinutes,
+    0,
+  );
+
+  const grossTarget =
+    rules.targetCalcMethod === "fixed"
+      ? rules.fixedTargetMinutes
+      : businessDates.length * rules.standardMinutesPerDay;
+  const targetMinutes = Math.max(0, grossTarget - timeOffDeduct);
+
+  const periodDays = days.filter((d) => inPeriod.has(d.workDate));
+  const counted = periodDays.filter((d) => d.status !== "incomplete");
+
+  const workedMinutes = counted.reduce((s, d) => s + d.workMinutes, 0);
+  const nightMinutes = counted.reduce((s, d) => s + d.nightMinutes, 0);
+  const holidayMinutes = counted
+    .filter((d) => d.isHoliday)
+    .reduce((s, d) => s + d.workMinutes, 0);
+
+  // ── 페이스 ──
+  // asOf를 기간 안으로 자른다. 기간 종료 후에 보면 전체가 경과한 것으로 본다.
+  const asOfDate = DateTime.fromJSDate(asOf, { zone }).toISODate()!;
+  const clamped =
+    asOfDate < periodStart
+      ? null
+      : asOfDate > periodEnd
+        ? periodEnd
+        : asOfDate;
+
+  const elapsedBusinessDates = clamped
+    ? businessDates.filter((d) => d <= clamped)
+    : [];
+  const elapsedTimeOffDeduct = periodTimeOff
+    .filter((t) => clamped !== null && t.date <= clamped)
+    .reduce((s, t) => s + t.deductMinutes, 0);
+
+  const elapsedTargetMinutes = Math.max(
+    0,
+    elapsedBusinessDates.length * rules.standardMinutesPerDay -
+      elapsedTimeOffDeduct,
+  );
+
+  // 목표에 대한 비율로 투사한다. 휴가가 목표에서 이미 빠져 있으므로
+  // 휴가 낀 기간에도 페이스가 왜곡되지 않는다.
+  const projectedMinutes =
+    elapsedTargetMinutes > 0
+      ? Math.round((workedMinutes / elapsedTargetMinutes) * targetMinutes)
+      : workedMinutes;
+
+  const gap = workedMinutes - elapsedTargetMinutes;
+  const paceStatus: PaceStatus =
+    gap > rules.paceToleranceMinutes
+      ? "ahead"
+      : gap < -rules.paceToleranceMinutes
+        ? "behind"
+        : "on_track";
+
+  // ── 법정 한도: 개별 주가 아니라 정산기간 평균으로 본다 ──
+  const weeks = allDates.length / 7;
+  const avgWeeklyMinutes = weeks > 0 ? workedMinutes / weeks : 0;
+  const legalTotalMinutes = weeks * rules.legalWeeklyMinutes;
+  const overtimeMinutes = Math.max(
+    0,
+    Math.round(workedMinutes - legalTotalMinutes),
+  );
+  const exceedsAvgWeeklyLimit = avgWeeklyMinutes > rules.maxAvgWeeklyMinutes;
+
+  // ── 확인 필요 ──
+  const incompleteDates = periodDays
+    .filter((d) => d.status === "incomplete")
+    .map((d) => d.workDate)
+    .sort();
+
+  const flaggedDates = periodDays
+    .filter((d) => d.flags.length > 0)
+    .map((d) => ({ date: d.workDate, flags: d.flags }))
+    .sort((a, b) => a.date.localeCompare(b.date));
+
+  const workedDates = new Set(
+    counted.filter((d) => d.workMinutes > 0).map((d) => d.workDate),
+  );
+  const timeOffConflicts = periodTimeOff
+    .filter((t) => workedDates.has(t.date))
+    .map((t) => t.date)
+    .sort();
+
+  let maxConsecutiveWorkDays = 0;
+  let run = 0;
+  let prev: string | null = null;
+  for (const date of [...workedDates].sort()) {
+    run = prev && isNextDay(prev, date, zone) ? run + 1 : 1;
+    if (run > maxConsecutiveWorkDays) maxConsecutiveWorkDays = run;
+    prev = date;
+  }
+
+  return {
+    periodStart,
+    periodEnd,
+    businessDays: businessDates.length,
+    targetMinutes,
+    workedMinutes,
+    remainingMinutes: Math.max(0, targetMinutes - workedMinutes),
+    nightMinutes,
+    holidayMinutes,
+    elapsedBusinessDays: elapsedBusinessDates.length,
+    elapsedTargetMinutes,
+    projectedMinutes,
+    paceStatus,
+    avgWeeklyMinutes,
+    overtimeMinutes,
+    exceedsAvgWeeklyLimit,
+    incompleteDates,
+    flaggedDates,
+    timeOffConflicts,
+    maxConsecutiveWorkDays,
+  };
+}
