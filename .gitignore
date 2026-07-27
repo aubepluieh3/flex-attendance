@@ -13,3 +13,6 @@ out/
 data/*.db
 data/*.db-journal
 .vscode/
+
+# Pretendard 서브셋은 저장소에 포함한다 (self-host, CDN 의존 없음)
+!public/fonts/**
