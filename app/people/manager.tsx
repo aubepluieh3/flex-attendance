@@ -142,104 +142,106 @@ export function PeopleManager({
 
       <section className="card">
         <h2>사용자 {people.length}명</h2>
-        <table>
-          <thead>
-            <tr>
-              <th>사번</th>
-              <th>이름</th>
-              <th>팀</th>
-              <th>역할</th>
-              <th>상태</th>
-              <th>세션</th>
-              <th />
-            </tr>
-          </thead>
-          <tbody>
-            {people.map((p) => (
-              <tr key={p.id} style={{ opacity: p.active ? 1 : 0.5 }}>
-                <td className="none">{p.employeeNo}</td>
-                <td>
-                  {p.name}
-                  {p.id === viewerId && <span className="tag">나</span>}
-                </td>
-                <td>
-                  <form action={action} className="inline">
-                    <input type="hidden" name="op" value="team" />
-                    <input type="hidden" name="userId" value={p.id} />
-                    <select
-                      name="teamId"
-                      defaultValue={p.teamId ?? ""}
-                      onChange={(e) => e.currentTarget.form?.requestSubmit()}
-                    >
-                      {teamOptions}
-                    </select>
-                  </form>
-                </td>
-                <td>
-                  <form action={action} className="inline">
-                    <input type="hidden" name="op" value="role" />
-                    <input type="hidden" name="userId" value={p.id} />
-                    <select
-                      name="role"
-                      defaultValue={p.role}
-                      onChange={(e) => e.currentTarget.form?.requestSubmit()}
-                    >
-                      {ROLES.map(([v, l]) => (
-                        <option key={v} value={v}>
-                          {l}
-                        </option>
-                      ))}
-                    </select>
-                  </form>
-                </td>
-                <td>
-                  {p.active ? (
-                    "활성"
-                  ) : (
-                    <span className="none">비활성</span>
-                  )}
-                  {!p.hasPassword && <span className="tag">로그인 불가</span>}
-                </td>
-                <td className="none">{p.sessionCount}</td>
-                <td>
-                  <div className="row-actions">
+        <div className="scroll-x">
+          <table>
+            <thead>
+              <tr>
+                <th>사번</th>
+                <th>이름</th>
+                <th>팀</th>
+                <th>역할</th>
+                <th>상태</th>
+                <th>세션</th>
+                <th />
+              </tr>
+            </thead>
+            <tbody>
+              {people.map((p) => (
+                <tr key={p.id} style={{ opacity: p.active ? 1 : 0.5 }}>
+                  <td className="none">{p.employeeNo}</td>
+                  <td>
+                    {p.name}
+                    {p.id === viewerId && <span className="tag">나</span>}
+                  </td>
+                  <td>
                     <form action={action} className="inline">
-                      <input type="hidden" name="op" value="reset" />
+                      <input type="hidden" name="op" value="team" />
                       <input type="hidden" name="userId" value={p.id} />
-                      <input type="hidden" name="name" value={p.name} />
-                      <input
-                        type="hidden"
-                        name="employeeNo"
-                        value={p.employeeNo}
-                      />
-                      <button type="submit" className="pill" disabled={pending}>
-                        비밀번호 초기화
-                      </button>
+                      <select
+                        name="teamId"
+                        defaultValue={p.teamId ?? ""}
+                        onChange={(e) => e.currentTarget.form?.requestSubmit()}
+                      >
+                        {teamOptions}
+                      </select>
                     </form>
-                    {p.id !== viewerId && (
+                  </td>
+                  <td>
+                    <form action={action} className="inline">
+                      <input type="hidden" name="op" value="role" />
+                      <input type="hidden" name="userId" value={p.id} />
+                      <select
+                        name="role"
+                        defaultValue={p.role}
+                        onChange={(e) => e.currentTarget.form?.requestSubmit()}
+                      >
+                        {ROLES.map(([v, l]) => (
+                          <option key={v} value={v}>
+                            {l}
+                          </option>
+                        ))}
+                      </select>
+                    </form>
+                  </td>
+                  <td>
+                    {p.active ? (
+                      "활성"
+                    ) : (
+                      <span className="none">비활성</span>
+                    )}
+                    {!p.hasPassword && <span className="tag">로그인 불가</span>}
+                  </td>
+                  <td className="none">{p.sessionCount}</td>
+                  <td>
+                    <div className="row-actions">
                       <form action={action} className="inline">
-                        <input type="hidden" name="op" value="active" />
+                        <input type="hidden" name="op" value="reset" />
                         <input type="hidden" name="userId" value={p.id} />
+                        <input type="hidden" name="name" value={p.name} />
                         <input
                           type="hidden"
-                          name="active"
-                          value={p.active ? "0" : "1"}
+                          name="employeeNo"
+                          value={p.employeeNo}
                         />
-                        <button
-                          type="submit"
-                          className="pill"
-                          disabled={pending}
-                        >
-                          {p.active ? "비활성화" : "활성화"}
+                        <button type="submit" className="pill" disabled={pending}>
+                          비밀번호 초기화
                         </button>
                       </form>
-                    )}
-                  </div>
-                </td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
+                      {p.id !== viewerId && (
+                        <form action={action} className="inline">
+                          <input type="hidden" name="op" value="active" />
+                          <input type="hidden" name="userId" value={p.id} />
+                          <input
+                            type="hidden"
+                            name="active"
+                            value={p.active ? "0" : "1"}
+                          />
+                          <button
+                            type="submit"
+                            className="pill"
+                            disabled={pending}
+                          >
+                            {p.active ? "비활성화" : "활성화"}
+                          </button>
+                        </form>
+                      )}
+                    </div>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
       </section>
     </>
   );

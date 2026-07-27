@@ -129,8 +129,14 @@ export default async function TeamPage({
           timezone={zone}
           isCurrent={isCurrent}
         />
-        {" · 구성원 "}{rows.length}명
-        {isCurrent && ` · 지금 근무 중 ${working.length}명`}
+        {/*
+          좁은 화면에서는 기간 알약이 한 줄을 다 쓰므로 이 글자가 다음 줄로
+          내려간다. 선행 "·" 을 붙이면 줄 맨 앞에 점만 남아서 어색하다.
+        */}
+        <span className="after-nav">
+          구성원 {rows.length}명
+          {isCurrent && ` · 지금 근무 중 ${working.length}명`}
+        </span>
         <br />
         <span className="dim">
           {needsReview.length > 0
@@ -145,50 +151,59 @@ export default async function TeamPage({
         </section>
       ) : (
         <section className="card">
-          <table>
-            <thead>
-              <tr>
-                <th>이름</th>
-                <th>상태</th>
-                <th>팀</th>
-                <th>실근무</th>
-                <th>소정근로</th>
-                <th>남음</th>
-                <th>확인 필요</th>
-              </tr>
-            </thead>
-            <tbody>
-              {rows.map((r) => (
-                <tr key={r.userId}>
-                  <td>
-                    <Link href={`/team/${r.userId}`}>{r.name}</Link>
-                  </td>
-                  <td>{presenceCell(r.presence)}</td>
-                  <td className="none">{r.teamName ?? "—"}</td>
-                  <td>{hm(r.summary.workedMinutes)}</td>
-                  <td className="none">{hm(r.summary.targetMinutes)}</td>
-                  <td>
-                    {r.summary.remainingMinutes === 0
-                      ? "달성"
-                      : hm(r.summary.remainingMinutes)}
-                  </td>
-                  <td>
-                    {r.review.total === 0 ? (
-                      <span className="none">—</span>
-                    ) : (
-                      <span
-                        className={
-                          r.review.exceedsLegalLimit ? "badge crit" : "badge"
-                        }
-                      >
-                        {r.review.total}
-                      </span>
-                    )}
-                  </td>
+          <div className="scroll-x">
+            <table>
+              <thead>
+                <tr>
+                  <th>이름</th>
+                  <th>상태</th>
+                  {/*
+                    좁은 화면에서는 팀·소정근로를 접는다. 팀은 대체로 다 같고
+                    소정근로는 사람마다 같은 값이라 판단에 안 쓰인다.
+                    "확인 필요"가 화면 밖으로 밀리는 게 훨씬 나쁘다.
+                  */}
+                  <th className="hide-sm">팀</th>
+                  <th>실근무</th>
+                  <th className="hide-sm">소정근로</th>
+                  <th>남음</th>
+                  <th>확인 필요</th>
                 </tr>
-              ))}
-            </tbody>
-          </table>
+              </thead>
+              <tbody>
+                {rows.map((r) => (
+                  <tr key={r.userId}>
+                    <td>
+                      <Link href={`/team/${r.userId}`}>{r.name}</Link>
+                    </td>
+                    <td>{presenceCell(r.presence)}</td>
+                    <td className="none hide-sm">{r.teamName ?? "—"}</td>
+                    <td>{hm(r.summary.workedMinutes)}</td>
+                    <td className="none hide-sm">
+                      {hm(r.summary.targetMinutes)}
+                    </td>
+                    <td>
+                      {r.summary.remainingMinutes === 0
+                        ? "달성"
+                        : hm(r.summary.remainingMinutes)}
+                    </td>
+                    <td>
+                      {r.review.total === 0 ? (
+                        <span className="none">—</span>
+                      ) : (
+                        <span
+                          className={
+                            r.review.exceedsLegalLimit ? "badge crit" : "badge"
+                          }
+                        >
+                          {r.review.total}
+                        </span>
+                      )}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
         </section>
       )}
 

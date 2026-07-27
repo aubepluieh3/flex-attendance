@@ -175,6 +175,11 @@ code {
 @media (max-width: 860px) {
   .shell {
     grid-template-columns: minmax(0, 1fr);
+    /*
+     * 행을 명시하지 않으면 min-height:100vh 의 남는 높이가 두 암시 행에
+     * 나눠 들어가서, 내용이 짧은 화면에서 상단 바가 세로로 늘어난다.
+     */
+    grid-template-rows: auto minmax(0, 1fr);
   }
 }
 
@@ -190,16 +195,39 @@ code {
   height: 100vh;
   overflow-y: auto;
 }
+/*
+ * 좁은 화면에서는 상단 바가 된다.
+ *
+ * 줄바꿈을 허용하면 메뉴가 늘어날수록 3줄이 되어 첫 화면의 절반을 헤더가
+ * 먹는다(팀장은 메뉴가 4개다). 그래서 두 줄로 고정한다 —
+ * 1행 브랜드 + 사용자, 2행 메뉴(넘치면 가로 스크롤).
+ */
 @media (max-width: 860px) {
   .sidebar {
-    position: static;
+    position: sticky;
+    top: 0;
+    z-index: 5;
     height: auto;
+    overflow: visible;
     border-right: none;
     border-bottom: 1px solid var(--line);
-    flex-direction: row;
-    flex-wrap: wrap;
+    display: grid;
+    grid-template-columns: auto minmax(0, 1fr);
+    grid-template-areas:
+      "brand foot"
+      "nav   nav";
     align-items: center;
-    padding: 12px 16px;
+    gap: 8px;
+    padding: 10px 16px;
+  }
+  .sidebar > .brand {
+    grid-area: brand;
+  }
+  .sidebar > .nav {
+    grid-area: nav;
+  }
+  .sidebar > .sidebar-foot {
+    grid-area: foot;
   }
 }
 
@@ -243,8 +271,20 @@ code {
 @media (max-width: 860px) {
   .nav {
     flex-direction: row;
-    flex-wrap: wrap;
-    gap: 4px;
+    /* 줄바꿈 대신 가로 스크롤 — 메뉴가 늘어나도 헤더 높이가 그대로다 */
+    flex-wrap: nowrap;
+    overflow-x: auto;
+    gap: 2px;
+    margin: 0 -16px;
+    padding: 0 16px;
+    scrollbar-width: none;
+  }
+  .nav::-webkit-scrollbar {
+    display: none;
+  }
+  .nav a {
+    flex: none;
+    padding: 7px 10px;
   }
 }
 .nav a {
@@ -284,6 +324,15 @@ code {
     border: none;
     flex-direction: row;
     align-items: center;
+    gap: 4px;
+  }
+  .whoami {
+    padding: 4px 6px;
+    text-align: right;
+  }
+  /* 이름만 남기고 역할·팀은 접는다. 내 계정 화면에 다 있다 */
+  .whoami .role {
+    display: none;
   }
 }
 .whoami {
@@ -349,6 +398,20 @@ code {
   font-size: 13.5px;
   margin: 0 0 22px;
 }
+/* 기간 알약 뒤에 붙는 보조 정보. 넓은 화면에서만 "·" 로 이어 붙인다 */
+.after-nav::before {
+  content: " · ";
+  color: var(--ink-3);
+}
+@media (max-width: 700px) {
+  .after-nav {
+    display: block;
+    margin-top: 4px;
+  }
+  .after-nav::before {
+    content: none;
+  }
+}
 .sub .dim {
   color: var(--ink-3);
   font-size: 13px;
@@ -381,6 +444,22 @@ code {
   font-weight: 600;
   color: var(--ink);
   padding: 0 6px;
+}
+.period-nav > .narrow {
+  display: none;
+}
+@media (max-width: 700px) {
+  .period-nav {
+    /* 알약이 한 줄을 차지하게 두면 뒤에 붙는 글자가 다음 줄로 내려간다 */
+    display: flex;
+    justify-content: space-between;
+  }
+  .period-nav > .wide {
+    display: none;
+  }
+  .period-nav > .narrow {
+    display: inline;
+  }
 }
 
 /* ── 카드 ── */
@@ -657,6 +736,21 @@ code {
 }
 
 /* ── 표 ── */
+/*
+ * 표는 자기 안에서만 가로 스크롤한다.
+ *
+ * 셀이 nowrap 이라 열이 많으면 표의 최소 너비가 화면보다 커진다. 감싸지 않으면
+ * 페이지 전체가 가로로 밀려서 본문을 읽을 때마다 좌우로 흔들린다.
+ * .card 에 overflow 를 걸면 차트 툴팁이 잘리므로 표만 감싼다.
+ */
+.scroll-x {
+  overflow-x: auto;
+  /* 스크롤이 생겼을 때 잘린 게 아니라 이어진다는 걸 보이게 */
+  margin: 0 -2px;
+  padding: 0 2px;
+  -webkit-overflow-scrolling: touch;
+}
+
 table {
   width: 100%;
   border-collapse: collapse;
@@ -688,6 +782,12 @@ tbody tr:hover td {
 }
 td.none {
   color: var(--ink-3);
+}
+/* 좁은 화면에서 접는 열. 없어도 판단이 되는 열만 여기 넣는다 */
+@media (max-width: 700px) {
+  .hide-sm {
+    display: none;
+  }
 }
 
 .tag {

@@ -182,59 +182,61 @@ export default async function TeamMemberPage({
 
       <section className="card">
         <h2>일별 기록</h2>
-        <table>
-          <thead>
-            <tr>
-              <th>날짜</th>
-              <th>출근</th>
-              <th>퇴근</th>
-              <th>실근무</th>
-              <th>비고</th>
-            </tr>
-          </thead>
-          <tbody>
-            {dates.map((date) => {
-              const d = byDate.get(date);
-              const dt = DateTime.fromISO(date, { zone });
-              return (
-                <tr key={date}>
-                  <td>
-                    {dt.toFormat("M/d")} ({WEEKDAY[dt.weekday - 1]})
-                  </td>
-                  {d ? (
-                    <>
-                      <td>{time(d.firstInAt)}</td>
-                      <td>{time(d.lastOutAt)}</td>
-                      <td>
-                        {d.status === "incomplete" ? "—" : hm(d.workMinutes)}
-                      </td>
-                      <td>
-                        {d.status === "incomplete" && (
-                          <span className="tag">미완료</span>
-                        )}
-                        {d.status === "adjusted" && (
-                          <span className="tag">보정됨</span>
-                        )}
-                        {d.flags.map((f) => (
-                          <span className="tag" key={f}>
-                            {FLAG_LABEL[f]}
-                          </span>
-                        ))}
-                      </td>
-                    </>
-                  ) : (
-                    <>
-                      <td colSpan={3} className="none">
-                        기록 없음
-                      </td>
-                      <td />
-                    </>
-                  )}
-                </tr>
-              );
-            })}
-          </tbody>
-        </table>
+        <div className="scroll-x">
+          <table>
+            <thead>
+              <tr>
+                <th>날짜</th>
+                <th>출근</th>
+                <th>퇴근</th>
+                <th>실근무</th>
+                <th>비고</th>
+              </tr>
+            </thead>
+            <tbody>
+              {dates.map((date) => {
+                const d = byDate.get(date);
+                const dt = DateTime.fromISO(date, { zone });
+                return (
+                  <tr key={date}>
+                    <td>
+                      {dt.toFormat("M/d")} ({WEEKDAY[dt.weekday - 1]})
+                    </td>
+                    {d ? (
+                      <>
+                        <td>{time(d.firstInAt)}</td>
+                        <td>{time(d.lastOutAt)}</td>
+                        <td>
+                          {d.status === "incomplete" ? "—" : hm(d.workMinutes)}
+                        </td>
+                        <td>
+                          {d.status === "incomplete" && (
+                            <span className="tag">미완료</span>
+                          )}
+                          {d.status === "adjusted" && (
+                            <span className="tag">보정됨</span>
+                          )}
+                          {d.flags.map((f) => (
+                            <span className="tag" key={f}>
+                              {FLAG_LABEL[f]}
+                            </span>
+                          ))}
+                        </td>
+                      </>
+                    ) : (
+                      <>
+                        <td colSpan={3} className="none">
+                          기록 없음
+                        </td>
+                        <td />
+                      </>
+                    )}
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+        </div>
       </section>
 
       <section className="card">
@@ -242,33 +244,35 @@ export default async function TeamMemberPage({
         {history.length === 0 ? (
           <p className="empty">보정한 기록이 없습니다.</p>
         ) : (
-          <table>
-            <thead>
-              <tr>
-                <th>대상</th>
-                <th>종류</th>
-                <th>사유</th>
-                <th>기록</th>
-              </tr>
-            </thead>
-            <tbody>
-              {history.map((h) => (
-                <tr key={h.id}>
-                  <td>
-                    {DateTime.fromISO(h.workDate, { zone }).toFormat("M/d")}
-                  </td>
-                  <td>{KIND_LABEL[h.kind]}</td>
-                  <td>{h.reason}</td>
-                  <td className="none">
-                    {h.createdByName} ·{" "}
-                    {DateTime.fromJSDate(h.createdAt, { zone }).toFormat(
-                      "M/d HH:mm",
-                    )}
-                  </td>
+          <div className="scroll-x">
+            <table>
+              <thead>
+                <tr>
+                  <th>대상</th>
+                  <th>종류</th>
+                  <th>사유</th>
+                  <th>기록</th>
                 </tr>
-              ))}
-            </tbody>
-          </table>
+              </thead>
+              <tbody>
+                {history.map((h) => (
+                  <tr key={h.id}>
+                    <td>
+                      {DateTime.fromISO(h.workDate, { zone }).toFormat("M/d")}
+                    </td>
+                    <td>{KIND_LABEL[h.kind]}</td>
+                    <td>{h.reason}</td>
+                    <td className="none">
+                      {h.createdByName} ·{" "}
+                      {DateTime.fromJSDate(h.createdAt, { zone }).toFormat(
+                        "M/d HH:mm",
+                      )}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
         )}
       </section>
     </main>

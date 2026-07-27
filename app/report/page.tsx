@@ -102,105 +102,109 @@ export default async function ReportPage({
 
       <section className="card">
         <h2>팀별</h2>
-        <table>
-          <thead>
-            <tr>
-              <th>팀</th>
-              <th>인원</th>
-              <th>기록 있음</th>
-              <th>실근무 합</th>
-              <th>소정근로 합</th>
-              <th>야간</th>
-              <th>휴일</th>
-              <th>52h 초과</th>
-              <th>미완료</th>
-            </tr>
-          </thead>
-          <tbody>
-            {aggregates.length === 0 ? (
+        <div className="scroll-x">
+          <table>
+            <thead>
               <tr>
-                <td colSpan={9} className="none">
-                  집계할 데이터가 없습니다.
-                </td>
+                <th>팀</th>
+                <th>인원</th>
+                <th>기록 있음</th>
+                <th>실근무 합</th>
+                <th>소정근로 합</th>
+                <th>야간</th>
+                <th>휴일</th>
+                <th>52h 초과</th>
+                <th>미완료</th>
               </tr>
-            ) : (
-              aggregates.map((a) => (
-                <tr key={a.teamName}>
-                  <td>{a.teamName}</td>
-                  <td>{a.headcount}</td>
-                  <td className="none">{a.activeCount}</td>
-                  <td>{hm(a.workedMinutes)}</td>
-                  <td className="none">{hm(a.targetMinutes)}</td>
-                  <td>{a.nightMinutes ? hm(a.nightMinutes) : "—"}</td>
-                  <td>{a.holidayMinutes ? hm(a.holidayMinutes) : "—"}</td>
-                  <td>
-                    {a.overLimitCount > 0 ? (
-                      <span className="badge crit">{a.overLimitCount}</span>
-                    ) : (
-                      <span className="none">—</span>
-                    )}
-                  </td>
-                  <td>
-                    {a.incompleteDays > 0 ? (
-                      <span className="badge">{a.incompleteDays}</span>
-                    ) : (
-                      <span className="none">—</span>
-                    )}
+            </thead>
+            <tbody>
+              {aggregates.length === 0 ? (
+                <tr>
+                  <td colSpan={9} className="none">
+                    집계할 데이터가 없습니다.
                   </td>
                 </tr>
-              ))
-            )}
-          </tbody>
-        </table>
+              ) : (
+                aggregates.map((a) => (
+                  <tr key={a.teamName}>
+                    <td>{a.teamName}</td>
+                    <td>{a.headcount}</td>
+                    <td className="none">{a.activeCount}</td>
+                    <td>{hm(a.workedMinutes)}</td>
+                    <td className="none">{hm(a.targetMinutes)}</td>
+                    <td>{a.nightMinutes ? hm(a.nightMinutes) : "—"}</td>
+                    <td>{a.holidayMinutes ? hm(a.holidayMinutes) : "—"}</td>
+                    <td>
+                      {a.overLimitCount > 0 ? (
+                        <span className="badge crit">{a.overLimitCount}</span>
+                      ) : (
+                        <span className="none">—</span>
+                      )}
+                    </td>
+                    <td>
+                      {a.incompleteDays > 0 ? (
+                        <span className="badge">{a.incompleteDays}</span>
+                      ) : (
+                        <span className="none">—</span>
+                      )}
+                    </td>
+                  </tr>
+                ))
+              )}
+            </tbody>
+          </table>
+        </div>
       </section>
 
       {people && (
         <>
           <section className="card">
             <h2>개인별</h2>
-            <table>
-              <thead>
-                <tr>
-                  <th>사번</th>
-                  <th>이름</th>
-                  <th>팀</th>
-                  <th>실근무</th>
-                  <th>소정근로</th>
-                  <th>주 평균</th>
-                  <th>법정초과</th>
-                  <th>확인</th>
-                </tr>
-              </thead>
-              <tbody>
-                {people.map((p) => (
-                  <tr key={p.userId}>
-                    <td className="none">{p.employeeNo}</td>
-                    <td>
-                      <Link href={`/team/${p.userId}`}>{p.name}</Link>
-                    </td>
-                    <td className="none">{p.teamName ?? "—"}</td>
-                    <td>{hm(p.summary.workedMinutes)}</td>
-                    <td className="none">{hm(p.summary.targetMinutes)}</td>
-                    <td>{hm(p.summary.avgWeeklyMinutes)}</td>
-                    <td>
-                      {p.summary.overtimeMinutes
-                        ? hm(p.summary.overtimeMinutes)
-                        : "—"}
-                    </td>
-                    <td>
-                      {p.summary.exceedsAvgWeeklyLimit && (
-                        <span className="tag">52h 초과</span>
-                      )}
-                      {p.summary.incompleteDates.length > 0 && (
-                        <span className="tag">
-                          미완료 {p.summary.incompleteDates.length}
-                        </span>
-                      )}
-                    </td>
+            <div className="scroll-x">
+              <table>
+                <thead>
+                  <tr>
+                    <th>사번</th>
+                    <th>이름</th>
+                    <th>팀</th>
+                    <th>실근무</th>
+                    <th>소정근로</th>
+                    <th>주 평균</th>
+                    <th>법정초과</th>
+                    <th>확인</th>
                   </tr>
-                ))}
-              </tbody>
-            </table>
+                </thead>
+                <tbody>
+                  {people.map((p) => (
+                    <tr key={p.userId}>
+                      <td className="none">{p.employeeNo}</td>
+                      <td>
+                        <Link href={`/team/${p.userId}`}>{p.name}</Link>
+                      </td>
+                      <td className="none">{p.teamName ?? "—"}</td>
+                      <td>{hm(p.summary.workedMinutes)}</td>
+                      <td className="none">{hm(p.summary.targetMinutes)}</td>
+                      <td>{hm(p.summary.avgWeeklyMinutes)}</td>
+                      <td>
+                        {p.summary.overtimeMinutes
+                          ? hm(p.summary.overtimeMinutes)
+                          : "—"}
+                      </td>
+                      <td>
+                        {p.summary.exceedsAvgWeeklyLimit && (
+                          <span className="tag">52h 초과</span>
+                        )}
+                        {p.summary.incompleteDates.length > 0 && (
+                          <span className="tag">
+                            미완료 {p.summary.incompleteDates.length}
+                          </span>
+                        )}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
           </section>
 
           <section className="card">

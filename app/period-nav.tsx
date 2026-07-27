@@ -38,9 +38,17 @@ export function PeriodNav({
   return (
     <span className="period-nav">
       {link(prev, "← 이전")}
-      <span>
+      {/*
+        좁은 화면에서는 연도를 뺀 짧은 표기를 쓴다. 긴 쪽을 그냥 두면 알약이
+        화면보다 넓어져서 뒤에 붙는 글자("· 구성원 3명")가 밖으로 밀려 나간다.
+      */}
+      <span className="wide">
         {from.toFormat("yyyy년 M월 d일")}({WEEKDAY[from.weekday - 1]}) ~{" "}
         {to.toFormat("M월 d일")}({WEEKDAY[to.weekday - 1]})
+      </span>
+      <span className="narrow">
+        {from.toFormat("M/d")}({WEEKDAY[from.weekday - 1]}) ~{" "}
+        {to.toFormat("M/d")}({WEEKDAY[to.weekday - 1]})
       </span>
       {link(next, "다음 →")}
       {!isCurrent && <Link href={basePath}>이번 기간으로</Link>}

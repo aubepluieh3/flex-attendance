@@ -171,34 +171,36 @@ export function Importer({ timezone }: { timezone: string }) {
           )}
 
           {/* 원본 문자열과 해석 결과를 나란히 둔다 — 이게 없으면 검증이 불가능하다 */}
-          <table>
-            <thead>
-              <tr>
-                <th>사번</th>
-                <th>파일에 적힌 값</th>
-                <th>이렇게 읽었습니다</th>
-                <th>구분</th>
-                <th>단말</th>
-              </tr>
-            </thead>
-            <tbody>
-              {result.tags.slice(0, PREVIEW_ROWS).map((tag) => (
-                <tr key={`${tag.rowIndex}`}>
-                  <td>{tag.employeeNo}</td>
-                  <td className="none">
-                    {effective.timestamp
-                      ? tag.raw[effective.timestamp]
-                      : `${tag.raw[effective.date!]} ${tag.raw[effective.time!]}`}
-                  </td>
-                  <td>{showTime(tag.occurredAt)}</td>
-                  <td>
-                    {{ in: "입장", out: "퇴장", unknown: "—" }[tag.direction]}
-                  </td>
-                  <td>{tag.deviceLabel ?? "—"}</td>
+          <div className="scroll-x">
+            <table>
+              <thead>
+                <tr>
+                  <th>사번</th>
+                  <th>파일에 적힌 값</th>
+                  <th>이렇게 읽었습니다</th>
+                  <th>구분</th>
+                  <th>단말</th>
                 </tr>
-              ))}
-            </tbody>
-          </table>
+              </thead>
+              <tbody>
+                {result.tags.slice(0, PREVIEW_ROWS).map((tag) => (
+                  <tr key={`${tag.rowIndex}`}>
+                    <td>{tag.employeeNo}</td>
+                    <td className="none">
+                      {effective.timestamp
+                        ? tag.raw[effective.timestamp]
+                        : `${tag.raw[effective.date!]} ${tag.raw[effective.time!]}`}
+                    </td>
+                    <td>{showTime(tag.occurredAt)}</td>
+                    <td>
+                      {{ in: "입장", out: "퇴장", unknown: "—" }[tag.direction]}
+                    </td>
+                    <td>{tag.deviceLabel ?? "—"}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
           {result.tags.length > PREVIEW_ROWS && (
             <p className="empty" style={{ marginTop: 10 }}>
               앞 {PREVIEW_ROWS}행만 보여줍니다.

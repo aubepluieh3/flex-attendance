@@ -560,73 +560,75 @@ export default async function Page({
       {/* 표 뷰 — 색에만 의존하지 않기 위해 항상 둔다 */}
       <section className="card">
         <h2>기록</h2>
-        <table>
-          <thead>
-            <tr>
-              <th>날짜</th>
-              {/*
-                나눠 일한 날이 있으므로 "출근/퇴근"이라고 쓰면 안 된다.
-                09~12 + 19~21 인 날의 09 와 21 은 하루의 양끝일 뿐이고,
-                그 사이를 근무로 읽으면 안 된다 — 실근무 열이 정답이다.
-              */}
-              <th>첫 시작</th>
-              <th>마지막 종료</th>
-              <th>체류</th>
-              <th>휴게</th>
-              <th>실근무</th>
-              <th>비고</th>
-            </tr>
-          </thead>
-          <tbody>
-            {dates.map((date) => {
-              const d = byDate.get(date);
-              const l = label(date, zone);
-              if (!d) {
+        <div className="scroll-x">
+          <table>
+            <thead>
+              <tr>
+                <th>날짜</th>
+                {/*
+                  나눠 일한 날이 있으므로 "출근/퇴근"이라고 쓰면 안 된다.
+                  09~12 + 19~21 인 날의 09 와 21 은 하루의 양끝일 뿐이고,
+                  그 사이를 근무로 읽으면 안 된다 — 실근무 열이 정답이다.
+                */}
+                <th>첫 시작</th>
+                <th>마지막 종료</th>
+                <th>체류</th>
+                <th>휴게</th>
+                <th>실근무</th>
+                <th>비고</th>
+              </tr>
+            </thead>
+            <tbody>
+              {dates.map((date) => {
+                const d = byDate.get(date);
+                const l = label(date, zone);
+                if (!d) {
+                  return (
+                    <tr key={date}>
+                      <td>
+                        {l.md} ({l.dow})
+                      </td>
+                      <td colSpan={5} className="none">
+                        기록 없음
+                      </td>
+                      <td />
+                    </tr>
+                  );
+                }
                 return (
                   <tr key={date}>
                     <td>
                       {l.md} ({l.dow})
                     </td>
-                    <td colSpan={5} className="none">
-                      기록 없음
+                    <td>{clock(d.firstInAt, zone) ?? "—"}</td>
+                    <td>{clock(d.lastOutAt, zone) ?? "—"}</td>
+                    <td>{d.stayMinutes ? hm(d.stayMinutes) : "—"}</td>
+                    <td>{d.breakMinutes ? hm(d.breakMinutes) : "—"}</td>
+                    <td>
+                      {d.status === "incomplete" ? "—" : hm(d.workMinutes)}
                     </td>
-                    <td />
+                    <td>
+                      {d.status === "incomplete" && (
+                        <span className="tag">미완료</span>
+                      )}
+                      {d.status === "open" && (
+                        <span className="tag">근무 중</span>
+                      )}
+                      {d.sessionCount > 1 && (
+                        <span className="tag">{d.sessionCount}번 나눠 근무</span>
+                      )}
+                      {d.flags.map((f) => (
+                        <span className="tag" key={f}>
+                          {FLAG_LABEL[f]}
+                        </span>
+                      ))}
+                    </td>
                   </tr>
                 );
-              }
-              return (
-                <tr key={date}>
-                  <td>
-                    {l.md} ({l.dow})
-                  </td>
-                  <td>{clock(d.firstInAt, zone) ?? "—"}</td>
-                  <td>{clock(d.lastOutAt, zone) ?? "—"}</td>
-                  <td>{d.stayMinutes ? hm(d.stayMinutes) : "—"}</td>
-                  <td>{d.breakMinutes ? hm(d.breakMinutes) : "—"}</td>
-                  <td>
-                    {d.status === "incomplete" ? "—" : hm(d.workMinutes)}
-                  </td>
-                  <td>
-                    {d.status === "incomplete" && (
-                      <span className="tag">미완료</span>
-                    )}
-                    {d.status === "open" && (
-                      <span className="tag">근무 중</span>
-                    )}
-                    {d.sessionCount > 1 && (
-                      <span className="tag">{d.sessionCount}번 나눠 근무</span>
-                    )}
-                    {d.flags.map((f) => (
-                      <span className="tag" key={f}>
-                        {FLAG_LABEL[f]}
-                      </span>
-                    ))}
-                  </td>
-                </tr>
-              );
-            })}
-          </tbody>
-        </table>
+              })}
+            </tbody>
+          </table>
+        </div>
       </section>
     </main>
   );

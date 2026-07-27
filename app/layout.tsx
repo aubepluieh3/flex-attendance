@@ -52,8 +52,10 @@ export default async function RootLayout({
             <div className="sidebar-foot">
               <Link href="/account" className="whoami">
                 <b>{viewer.name}</b>
-                {ROLE_LABEL[viewer.role]}
-                {viewer.teamName ? ` · ${viewer.teamName}` : ""}
+                <span className="role">
+                  {ROLE_LABEL[viewer.role]}
+                  {viewer.teamName ? ` · ${viewer.teamName}` : ""}
+                </span>
               </Link>
               <form action={logoutAction}>
                 <button type="submit" className="pill">

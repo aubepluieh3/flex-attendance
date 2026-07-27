@@ -349,46 +349,48 @@ export default async function RecordsPage({
         {history.length === 0 ? (
           <p className="empty">아직 보정한 기록이 없습니다.</p>
         ) : (
-          <table>
-            <thead>
-              <tr>
-                <th>대상 날짜</th>
-                <th>종류</th>
-                <th>내용</th>
-                <th>사유</th>
-                <th>기록</th>
-              </tr>
-            </thead>
-            <tbody>
-              {history.map((h) => (
-                <tr key={h.id}>
-                  <td>
-                    {DateTime.fromISO(h.workDate, { zone }).toFormat("M/d")}
-                  </td>
-                  <td>{KIND_LABEL[h.kind]}</td>
-                  <td>
-                    {h.kind === "revert"
-                      ? "—"
-                      : [
-                          h.overrideFirstInAt || h.overrideLastOutAt
-                            ? `${time(h.overrideFirstInAt)}~${time(h.overrideLastOutAt)}`
-                            : null,
-                          h.addedMinutes ? `+${hm(h.addedMinutes)}` : null,
-                        ]
-                          .filter(Boolean)
-                          .join(" · ")}
-                  </td>
-                  <td>{h.reason}</td>
-                  <td className="none">
-                    {h.createdByName} ·{" "}
-                    {DateTime.fromJSDate(h.createdAt, { zone }).toFormat(
-                      "M/d HH:mm",
-                    )}
-                  </td>
+          <div className="scroll-x">
+            <table>
+              <thead>
+                <tr>
+                  <th>대상 날짜</th>
+                  <th>종류</th>
+                  <th>내용</th>
+                  <th>사유</th>
+                  <th>기록</th>
                 </tr>
-              ))}
-            </tbody>
-          </table>
+              </thead>
+              <tbody>
+                {history.map((h) => (
+                  <tr key={h.id}>
+                    <td>
+                      {DateTime.fromISO(h.workDate, { zone }).toFormat("M/d")}
+                    </td>
+                    <td>{KIND_LABEL[h.kind]}</td>
+                    <td>
+                      {h.kind === "revert"
+                        ? "—"
+                        : [
+                            h.overrideFirstInAt || h.overrideLastOutAt
+                              ? `${time(h.overrideFirstInAt)}~${time(h.overrideLastOutAt)}`
+                              : null,
+                            h.addedMinutes ? `+${hm(h.addedMinutes)}` : null,
+                          ]
+                            .filter(Boolean)
+                            .join(" · ")}
+                    </td>
+                    <td>{h.reason}</td>
+                    <td className="none">
+                      {h.createdByName} ·{" "}
+                      {DateTime.fromJSDate(h.createdAt, { zone }).toFormat(
+                        "M/d HH:mm",
+                      )}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
         )}
       </section>
     </main>
