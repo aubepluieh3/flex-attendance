@@ -261,7 +261,12 @@ export const attendanceLogs = pgTable(
       .notNull()
       .references(() => users.id),
     occurredAt: timestamp("occurred_at", { withTimezone: true }).notNull(),
-    deviceLabel: text("device_label"),
+    /**
+     * NULL이 아니라 빈 문자열을 쓴다. Postgres 유니크 인덱스는 NULL을 서로 다른
+     * 값으로 취급해서, nullable로 두면 단말명이 없는 태그는 중복 방지가 통째로
+     * 안 걸린다 — 같은 CSV를 두 번 올리면 그대로 두 배가 된다.
+     */
+    deviceLabel: text("device_label").notNull().default(""),
     direction: logDirection("direction").notNull().default("unknown"),
     source: logSource("source").notNull().default("import"),
     importBatchId: uuid("import_batch_id").references(() => importBatches.id),

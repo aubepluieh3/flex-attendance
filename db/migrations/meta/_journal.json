@@ -15,6 +15,13 @@
       "when": 1785132030589,
       "tag": "0001_icy_yellowjacket",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "7",
+      "when": 1785132510086,
+      "tag": "0002_smiling_old_lace",
+      "breakpoints": true
     }
   ]
 }
