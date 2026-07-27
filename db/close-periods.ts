@@ -7,7 +7,7 @@ import { now } from "@/lib/clock";
 /**
  * 유예기간이 지난 정산기간을 마감한다. 배치로 매일 한 번 돌리면 된다.
  *
- *   npm run db:close-periods            (기준: 현재 시각 / DEMO_CLOCK)
+ *   npm run db:close-periods            (기준: 현재 시각)
  *   npm run db:close-periods 2026-08-05 (기준 날짜 지정)
  */
 

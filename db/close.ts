@@ -423,7 +423,7 @@ export async function reopenPeriod(
   if (period.status === "open") throw new Error("이미 열려 있는 기간입니다.");
 
   // lib/clock 의 now()를 쓴다. new Date()를 쓰면 앱 안에 시계가 두 개가 되어
-  // DEMO_CLOCK 이나 테스트 기준 시각과 어긋난다.
+  // FLEX_CLOCK 이나 테스트 기준 시각과 어긋난다.
   await db
     .update(settlementPeriods)
     .set({ status: "open", closedAt: null, reopenedAt: now() })

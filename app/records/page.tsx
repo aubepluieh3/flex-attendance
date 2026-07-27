@@ -7,6 +7,7 @@ import type { ComputedDay, DayFlag } from "@/lib/attendance/types";
 import { now } from "@/lib/clock";
 import { requestViewer } from "../viewer";
 import { adjustAction, revertAction } from "./actions";
+import { PeriodNav } from "../period-nav";
 
 export const dynamic = "force-dynamic";
 
@@ -36,20 +37,25 @@ function hm(minutes: number): string {
   return `${h}시간 ${m}분`;
 }
 
-export default async function RecordsPage() {
+export default async function RecordsPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ period?: string }>;
+}) {
+  const { period } = await searchParams;
   const viewer = await requestViewer();
   const rules = await loadOrgRules(viewer.orgId);
   const zone = rules.attendance.timezone;
 
   const asOf = now();
-  const range = resolvePeriod(
-    DateTime.fromJSDate(asOf, { zone }).toISODate()!,
-    {
-      kind: rules.settlementKind,
-      weekStartDay: rules.weekStartDay,
-      timezone: zone,
-    },
-  );
+  const opts = {
+    kind: rules.settlementKind,
+    weekStartDay: rules.weekStartDay,
+    timezone: zone,
+  };
+  const today = DateTime.fromJSDate(asOf, { zone }).toISODate()!;
+  const range = resolvePeriod(period ?? today, opts);
+  const isCurrent = range.start === resolvePeriod(today, opts).start;
 
   const days = await loadWorkDays(viewer, viewer.id, range);
   const history = await listAdjustments(viewer, viewer.id, range);
@@ -78,8 +84,14 @@ export default async function RecordsPage() {
         <span className="team">{viewer.teamName ?? rules.orgName}</span>
       </div>
       <p className="sub">
-        {DateTime.fromISO(range.start, { zone }).toFormat("M월 d일")} ~{" "}
-        {DateTime.fromISO(range.end, { zone }).toFormat("M월 d일")}
+        <PeriodNav
+          basePath="/records"
+          range={range}
+          kind={rules.settlementKind}
+          weekStartDay={rules.weekStartDay}
+          timezone={zone}
+          isCurrent={isCurrent}
+        />
         <br />
         <span className="dim">
           사원증 기록이 빠졌거나 외근을 한 날을 보정합니다. 원본 기록은 지우지

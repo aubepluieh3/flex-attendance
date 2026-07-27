@@ -5,6 +5,7 @@ import { loadTeamRows } from "@/db/team";
 import { resolvePeriod } from "@/lib/attendance/period";
 import { now } from "@/lib/clock";
 import { requestViewer } from "../viewer";
+import { PeriodNav } from "../period-nav";
 
 export const dynamic = "force-dynamic";
 
@@ -19,7 +20,12 @@ function hm(minutes: number): string {
   return `${h}시간 ${m}분`;
 }
 
-export default async function TeamPage() {
+export default async function TeamPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ period?: string }>;
+}) {
+  const { period } = await searchParams;
   const viewer = await requestViewer();
   const rules = await loadOrgRules(viewer.orgId);
   const zone = rules.attendance.timezone;
@@ -55,11 +61,14 @@ export default async function TeamPage() {
   }
 
   const asOf = now();
-  const range = resolvePeriod(DateTime.fromJSDate(asOf, { zone }).toISODate()!, {
+  const opts = {
     kind: rules.settlementKind,
     weekStartDay: rules.weekStartDay,
     timezone: zone,
-  });
+  };
+  const today = DateTime.fromJSDate(asOf, { zone }).toISODate()!;
+  const range = resolvePeriod(period ?? today, opts);
+  const isCurrent = range.start === resolvePeriod(today, opts).start;
   const rows = await loadTeamRows(viewer, range, rules, asOf);
 
   const from = DateTime.fromISO(range.start, { zone });
@@ -78,9 +87,15 @@ export default async function TeamPage() {
         </span>
       </div>
       <p className="sub">
-        {from.toFormat("M월 d일")}({WEEKDAY[from.weekday - 1]}) ~{" "}
-        {to.toFormat("M월 d일")}({WEEKDAY[to.weekday - 1]}) · 구성원{" "}
-        {rows.length}명
+        <PeriodNav
+          basePath="/team"
+          range={range}
+          kind={rules.settlementKind}
+          weekStartDay={rules.weekStartDay}
+          timezone={zone}
+          isCurrent={isCurrent}
+        />
+        {" · 구성원 "}{rows.length}명
         <br />
         <span className="dim">
           {needsReview.length > 0

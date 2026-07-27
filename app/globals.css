@@ -603,3 +603,6 @@ form.inline select {
 .row-actions { display: flex; gap: 6px; justify-content: flex-end; }
 a.whoami { text-decoration: none; }
 a.whoami:hover { color: var(--ink); }
+
+.period-nav { display: inline-flex; flex-wrap: wrap; align-items: baseline; gap: 10px; }
+.period-nav a { text-decoration: none; font-weight: 600; }

@@ -1,4 +1,5 @@
 import "dotenv/config";
+import { eq } from "drizzle-orm";
 import { db, pool } from "./client";
 import {
   accessLogs,
@@ -6,9 +7,12 @@ import {
   dayAdjustments,
   holidays,
   importBatches,
+  loginAttempts,
+  notifications,
   orgs,
   periodCloseEvents,
   periodSnapshots,
+  sessions,
   settlementPeriods,
   teams,
   timeOff,
@@ -16,23 +20,32 @@ import {
   workDays,
 } from "./schema";
 import { recomputeWorkDays } from "./recompute";
+import { syncNotifications } from "./notify";
 import { hashPassword } from "@/lib/password";
 import {
+  DEMO_PASSWORD,
   demoAttendanceRules,
-  demoEmployee,
-  demoPeriod,
-  demoTags,
+  demoPeople,
+  demoPeriods,
+  demoTagsFor,
 } from "@/lib/seed";
+import { now } from "@/lib/clock";
 
 /**
- * 개발용 시드. 화면을 실제 DB로 돌리기 위한 최소 데이터.
+ * 개발용 시드.
  *
- * 태그 원본만 넣고 work_days는 recomputeWorkDays로 만든다 — 실제 임포트와
- * 같은 경로를 타야 시드와 운영이 어긋나지 않는다.
+ * 태그 원본만 넣고 work_days 는 recomputeWorkDays 로 만든다 — 시드와 운영이
+ * 같은 경로를 타야 어긋나지 않는다.
+ *
+ * 날짜는 실제 오늘 기준 상대값이다. 고정 날짜를 쓰면 화면이 고장 난 것처럼
+ * 보인다.
  */
 
 async function reset() {
   // FK 순서대로 비운다
+  await db.delete(notifications);
+  await db.delete(loginAttempts);
+  await db.delete(sessions);
   await db.delete(accessLogs);
   await db.delete(periodSnapshots);
   await db.delete(periodCloseEvents);
@@ -48,111 +61,109 @@ async function reset() {
   await db.delete(orgs);
 }
 
-const DEMO_PASSWORD = "flex-demo-1234";
-
 async function main() {
   await reset();
-  // 개발용 공통 비밀번호. 운영에서는 초대 메일이나 SSO 로 대체한다.
+  const asOf = now();
+  const { today, current, last, twoAgo } = demoPeriods(asOf);
   const passwordHash = await hashPassword(DEMO_PASSWORD);
 
+  const a = demoAttendanceRules;
   const [org] = await db
     .insert(orgs)
     .values({
       name: "FORCS",
-      timezone: demoAttendanceRules.timezone,
+      timezone: a.timezone,
       settlementPeriod: "week",
       weekStartDay: 1,
       targetMinutesPerPeriod: 40 * 60,
       limitMinutesPerWeek: 52 * 60,
       standardMinutesPerDay: 8 * 60,
-      breakRules: demoAttendanceRules.breakRules,
-      dayBoundaryHour: demoAttendanceRules.dayBoundaryHour,
-      coreTimeStart: demoAttendanceRules.coreTime?.start,
-      coreTimeEnd: demoAttendanceRules.coreTime?.end,
-      flexBandStart: demoAttendanceRules.flexBand?.start,
-      flexBandEnd: demoAttendanceRules.flexBand?.end,
-      nightWindowStart: demoAttendanceRules.nightWindow.start,
-      nightWindowEnd: demoAttendanceRules.nightWindow.end,
-      dailyLimitMinutes: demoAttendanceRules.dailyLimitMinutes,
-      weekendDays: demoAttendanceRules.weekendDays,
+      breakRules: a.breakRules,
+      dayBoundaryHour: a.dayBoundaryHour,
+      coreTimeStart: a.coreTime?.start,
+      coreTimeEnd: a.coreTime?.end,
+      flexBandStart: a.flexBand?.start,
+      flexBandEnd: a.flexBand?.end,
+      nightWindowStart: a.nightWindow.start,
+      nightWindowEnd: a.nightWindow.end,
+      dailyLimitMinutes: a.dailyLimitMinutes,
+      weekendDays: a.weekendDays,
     })
     .returning();
 
-  const [platform] = await db
+  const [hq] = await db
     .insert(teams)
     .values({ orgId: org.id, name: "플랫폼본부" })
     .returning();
   const [squad] = await db
     .insert(teams)
-    .values({ orgId: org.id, name: demoEmployee.team, parentId: platform.id })
+    .values({ orgId: org.id, name: "플랫폼팀", parentId: hq.id })
     .returning();
 
-  const [member] = await db
-    .insert(users)
-    .values({
+  await db.insert(users).values(
+    demoPeople.map((p) => ({
       orgId: org.id,
-      name: demoEmployee.name,
-      employeeNo: demoEmployee.employeeNo,
-      teamId: squad.id,
-      role: "member",
+      name: p.name,
+      employeeNo: p.employeeNo,
+      teamId: p.team === "hq" ? hq.id : squad.id,
+      role: p.role,
       passwordHash,
-    })
-    .returning();
-
-  await db.insert(users).values([
-    {
-      orgId: org.id,
-      name: "이하람",
-      employeeNo: "F2016-008",
-      teamId: squad.id,
-      role: "manager",
-      passwordHash,
-    },
-    {
-      orgId: org.id,
-      name: "정세아",
-      employeeNo: "F2014-002",
-      teamId: platform.id,
-      role: "hr",
-      passwordHash,
-    },
-  ]);
-
-  await db.insert(attendanceLogs).values(
-    demoTags.map((tag) => ({
-      orgId: org.id,
-      userId: member.id,
-      occurredAt: tag.occurredAt,
-      direction: tag.direction ?? "unknown",
-      // device_label 은 NOT NULL 이다 (NULL 이면 중복 방지 인덱스가 안 걸린다)
-      deviceLabel: tag.deviceLabel ?? "",
-      source: "import" as const,
     })),
   );
 
-  await db.insert(settlementPeriods).values({
-    orgId: org.id,
-    periodStart: demoPeriod.start,
-    periodEnd: demoPeriod.end,
-    status: "open",
-  });
+  const people = await db
+    .select({ id: users.id, employeeNo: users.employeeNo, name: users.name })
+    .from(users)
+    .where(eq(users.orgId, org.id));
+  const idByNo = new Map(people.map((p) => [p.employeeNo, p]));
 
-  const days = await recomputeWorkDays({
-    orgId: org.id,
-    userId: member.id,
-    from: demoPeriod.start,
-    to: demoPeriod.end,
-    rules: demoAttendanceRules,
-  });
-
-  console.log(`로그인 비밀번호: ${DEMO_PASSWORD}`);
-  console.log(`org ${org.name} · 사용자 3명 · 태그 ${demoTags.length}건`);
-  console.log(`work_days ${days.length}건 생성`);
-  for (const d of days) {
-    console.log(
-      `  ${d.workDate} ${d.status.padEnd(10)} 실근무 ${String(d.workMinutes).padStart(3)}분` +
-        (d.flags.length ? ` · ${d.flags.join(",")}` : ""),
+  let tagCount = 0;
+  for (const { employeeNo, tags } of demoTagsFor(asOf)) {
+    const user = idByNo.get(employeeNo);
+    if (!user || tags.length === 0) continue;
+    await db.insert(attendanceLogs).values(
+      tags.map((tag) => ({
+        orgId: org.id,
+        userId: user.id,
+        occurredAt: tag.occurredAt,
+        direction: tag.direction ?? ("unknown" as const),
+        // device_label 은 NOT NULL (NULL 이면 중복 방지 인덱스가 안 걸린다)
+        deviceLabel: tag.deviceLabel ?? "",
+        source: "import" as const,
+      })),
     );
+    tagCount += tags.length;
+  }
+
+  for (const range of [twoAgo, last, current]) {
+    await db.insert(settlementPeriods).values({
+      orgId: org.id,
+      periodStart: range.start,
+      periodEnd: range.end,
+      status: "open",
+    });
+  }
+
+  let dayRows = 0;
+  for (const p of people) {
+    const days = await recomputeWorkDays({
+      orgId: org.id,
+      userId: p.id,
+      from: twoAgo.start,
+      to: current.end,
+      rules: a,
+    });
+    dayRows += days.length;
+  }
+
+  await syncNotifications(org.id, asOf);
+
+  console.log(`오늘: ${today}`);
+  console.log(`정산기간: ${twoAgo.start} ~ ${current.end} (주 3개)`);
+  console.log(`사용자 ${demoPeople.length}명 · 태그 ${tagCount}건 · work_days ${dayRows}건`);
+  console.log(`로그인 비밀번호: ${DEMO_PASSWORD}`);
+  for (const p of demoPeople) {
+    console.log(`  ${p.employeeNo}  ${p.name.padEnd(4)} ${p.role}`);
   }
 }
 

@@ -6,7 +6,7 @@ import { join, relative } from "node:path";
  * 기준 시각은 lib/clock.ts 의 now() 한 곳에서만 만든다.
  *
  * 같은 실수를 두 번 했다 (reopenPeriod, recomputeEveryone). 앱 안에 시계가
- * 두 개면 DEMO_CLOCK 과 테스트 기준 시각이 조용히 어긋나고, 마감 유예처럼
+ * 두 개면 FLEX_CLOCK 과 테스트 기준 시각이 조용히 어긋나고, 마감 유예처럼
  * 시각에 의존하는 계산이 틀린다. 습관에 기대지 않고 여기서 막는다.
  *
  * 허용: new Date(인자) — 문자열·타임스탬프 파싱은 시계가 아니다.

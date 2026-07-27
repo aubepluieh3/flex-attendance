@@ -2,11 +2,12 @@ import { DateTime } from "luxon";
 import { computePeriodSummary } from "@/lib/attendance/settle";
 import { resolvePeriod } from "@/lib/attendance/period";
 import type { ComputedDay, DayFlag } from "@/lib/attendance/types";
-import { isDemoClock, now } from "@/lib/clock";
+import { isFixedClock, now } from "@/lib/clock";
 import { loadOrgRules, loadTimeOff, loadWorkDays } from "@/db/access";
 import { loadPeriodState } from "@/db/close";
 import Link from "next/link";
 import { requestViewer } from "./viewer";
+import { PeriodNav } from "./period-nav";
 
 // DB를 읽으므로 빌드 시점에 프리렌더하지 않는다
 export const dynamic = "force-dynamic";
@@ -63,18 +64,26 @@ const label = (date: string, zone: string) => {
   return { md: dt.toFormat("M/d"), dow: WEEKDAY[dt.weekday - 1] };
 };
 
-export default async function Page() {
+export default async function Page({
+  searchParams,
+}: {
+  searchParams: Promise<{ period?: string }>;
+}) {
+  const { period } = await searchParams;
   const viewer = await requestViewer();
   const rules = await loadOrgRules(viewer.orgId);
   const zone = rules.attendance.timezone;
 
   const asOf = now();
   const asOfDate = DateTime.fromJSDate(asOf, { zone }).toISODate()!;
-  const range = resolvePeriod(asOfDate, {
+  const opts = {
     kind: rules.settlementKind,
     weekStartDay: rules.weekStartDay,
     timezone: zone,
-  });
+  };
+  const range = resolvePeriod(period ?? asOfDate, opts);
+  const currentRange = resolvePeriod(asOfDate, opts);
+  const isCurrent = range.start === currentRange.start;
 
   const days = await loadWorkDays(viewer, viewer.id, range);
   const off = await loadTimeOff(viewer, viewer.id, range);
@@ -171,15 +180,20 @@ export default async function Page() {
               ` · ${DateTime.fromJSDate(periodState.closedAt, { zone }).toFormat("M/d")}`}
           </span>
         )}
-        {isDemoClock() && <span className="chip">데모 시계</span>}
+        {isFixedClock() && <span className="chip">고정 시계 (개발)</span>}
       </div>
       <p className="sub">
-        {from.toFormat("yyyy년 M월 d일")}({WEEKDAY[from.weekday - 1]}) ~{" "}
-        {to.toFormat("M월 d일")}({WEEKDAY[to.weekday - 1]}) ·{" "}
-        {rules.settlementKind === "week" ? "주" : "월"} 단위 정산
+        <PeriodNav
+          basePath="/"
+          range={range}
+          kind={rules.settlementKind}
+          weekStartDay={rules.weekStartDay}
+          timezone={zone}
+          isCurrent={isCurrent}
+        />
         <br />
         <span className="dim">
-          {DateTime.fromJSDate(asOf, { zone }).toFormat("M월 d일 HH:mm")} 기준 ·{" "}
+          {rules.settlementKind === "week" ? "주" : "월"} 단위 정산 ·{" "}
           {importedThrough}
         </span>
       </p>
