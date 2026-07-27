@@ -39,6 +39,19 @@ const toMinutes = (hhmm: string) => {
   return h * 60 + m;
 };
 
+/**
+ * 실제로 존재하는 날짜인지 본다.
+ * 형식만 검사하면 "2026-13-99" 가 통과해서 Postgres 에러가 사용자에게
+ * 그대로 노출된다.
+ */
+function assertDate(value: string, label: string): string {
+  const text = value.trim();
+  if (!DateTime.fromISO(text).isValid || !/^\d{4}-\d{2}-\d{2}$/.test(text)) {
+    throw new Error(`${label}가 올바른 날짜가 아닙니다: "${text}"`);
+  }
+  return text;
+}
+
 export type OrgRulesInput = {
   settlementPeriod: "week" | "month";
   weekStartDay: number;
@@ -219,12 +232,12 @@ export async function listHolidays(orgId: string) {
 
 export async function addHoliday(viewer: Viewer, date: string, name: string) {
   assertHr(viewer);
-  if (!/^\d{4}-\d{2}-\d{2}$/.test(date)) throw new Error("날짜를 넣어 주세요.");
+  const day = assertDate(date, "공휴일 날짜");
   if (!name.trim()) throw new Error("공휴일 이름을 넣어 주세요.");
 
   await db
     .insert(holidays)
-    .values({ orgId: viewer.orgId, date, name: name.trim() })
+    .values({ orgId: viewer.orgId, date: day, name: name.trim() })
     .onConflictDoNothing();
 }
 
@@ -270,12 +283,10 @@ export async function addTimeOff(
   },
 ) {
   assertHr(viewer);
-  if (!/^\d{4}-\d{2}-\d{2}$/.test(input.date)) {
-    throw new Error("날짜를 넣어 주세요.");
-  }
+  const day = assertDate(input.date, "휴가 날짜");
 
   const rules = await loadOrgRules(viewer.orgId);
-  const range = resolvePeriod(input.date, {
+  const range = resolvePeriod(day, {
     kind: rules.settlementKind,
     weekStartDay: rules.weekStartDay,
     timezone: rules.attendance.timezone,
@@ -309,7 +320,7 @@ export async function addTimeOff(
     .values({
       orgId: viewer.orgId,
       userId: target.id,
-      date: input.date,
+      date: day,
       kind: input.kind,
       deductMinutes,
       reason: input.reason.trim() || null,
