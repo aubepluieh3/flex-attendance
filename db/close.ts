@@ -37,8 +37,10 @@ async function summaryFor(
   range: PeriodRange,
   rules: OrgRules,
   asOf: Date,
+  /** 트랜잭션 안에서 부르면 같은 트랜잭션으로 읽는다 */
+  executor: Pick<typeof db, "select"> = db,
 ) {
-  const dayRows = await db
+  const dayRows = await executor
     .select()
     .from(workDays)
     .where(
@@ -50,7 +52,7 @@ async function summaryFor(
     )
     .orderBy(asc(workDays.workDate));
 
-  const offRows = await db
+  const offRows = await executor
     .select({
       date: timeOff.date,
       kind: timeOff.kind,
@@ -193,38 +195,58 @@ export async function closeDuePeriods(
           .toJSDate() > asOf;
 
       if (period.status === "open" && !reopenGraceLeft) {
-        let count = 0;
-        for (const member of members) {
-          const summary = await summaryFor(member.id, range, rules, asOf);
-          const snap = snapshotOf(summary);
-          await db
-            .insert(periodSnapshots)
-            .values({
+        /**
+         * 마감을 원자적으로 선점한다.
+         *
+         * status 를 읽고 나서 업데이트하면 그 사이에 다른 실행이 끼어들어
+         * 같은 기간이 여러 번 마감된다 — 스냅샷과 마감 이력이 배수로 쌓인다.
+         * UPDATE ... WHERE status='open' 이 행을 잠그므로, 트랜잭션 안에서
+         * 이걸 먼저 하면 한 쪽만 통과한다.
+         */
+        const count = await db.transaction(async (tx) => {
+          const claimed = await tx
+            .update(settlementPeriods)
+            .set({ status: "closed", closedAt: asOf })
+            .where(
+              and(
+                eq(settlementPeriods.id, period.id),
+                eq(settlementPeriods.status, "open"),
+              ),
+            )
+            .returning({ id: settlementPeriods.id });
+
+          // 다른 실행이 먼저 마감했다
+          if (claimed.length === 0) return null;
+
+          let n = 0;
+          for (const member of members) {
+            const summary = await summaryFor(member.id, range, rules, asOf, tx);
+            await tx.insert(periodSnapshots).values({
               orgId,
               periodId: period.id,
               userId: member.id,
-              ...snap,
+              ...snapshotOf(summary),
             });
-          count += 1;
+            n += 1;
+          }
+
+          // 자동 마감이므로 actorUserId는 없다
+          await tx.insert(periodCloseEvents).values({
+            periodId: period.id,
+            action: "close",
+            reason: `유예 ${rules.closeGraceDays}일 경과 후 자동 마감`,
+          });
+
+          return n;
+        });
+
+        if (count !== null) {
+          results.push({
+            periodStart: range.start,
+            periodEnd: range.end,
+            snapshots: count,
+          });
         }
-
-        await db
-          .update(settlementPeriods)
-          .set({ status: "closed", closedAt: asOf })
-          .where(eq(settlementPeriods.id, period.id));
-
-        // 자동 마감이므로 actorUserId는 없다
-        await db.insert(periodCloseEvents).values({
-          periodId: period.id,
-          action: "close",
-          reason: `유예 ${rules.closeGraceDays}일 경과 후 자동 마감`,
-        });
-
-        results.push({
-          periodStart: range.start,
-          periodEnd: range.end,
-          snapshots: count,
-        });
       }
     }
 

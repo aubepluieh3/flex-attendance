@@ -15,7 +15,8 @@
     "db:seed": "tsx db/seed.ts",
     "db:reset": "docker compose down -v && docker compose up -d && node -e \"setTimeout(()=>{},6000)\" && npm run db:migrate && npm run db:seed",
     "db:check-access": "tsx db/access.check.ts",
-    "db:close-periods": "tsx db/close-periods.ts"
+    "db:close-periods": "tsx db/close-periods.ts",
+    "verify": "npm run typecheck && npm run test && npm run build"
   },
   "dependencies": {
     "drizzle-orm": "^0.45.2",

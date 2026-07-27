@@ -116,7 +116,8 @@ async function main() {
       userId: member.id,
       occurredAt: tag.occurredAt,
       direction: tag.direction ?? "unknown",
-      deviceLabel: tag.deviceLabel ?? null,
+      // device_label 은 NOT NULL 이다 (NULL 이면 중복 방지 인덱스가 안 걸린다)
+      deviceLabel: tag.deviceLabel ?? "",
       source: "import" as const,
     })),
   );

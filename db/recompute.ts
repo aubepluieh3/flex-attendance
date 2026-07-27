@@ -1,4 +1,4 @@
-import { and, asc, desc, eq, gte, lte } from "drizzle-orm";
+import { and, asc, desc, eq, gte, lte, sql } from "drizzle-orm";
 import { DateTime } from "luxon";
 import { db } from "./client";
 import { attendanceLogs, dayAdjustments, workDays } from "./schema";
@@ -92,6 +92,15 @@ export async function recomputeWorkDays(opts: {
   );
 
   await db.transaction(async (tx) => {
+    /**
+     * 같은 사람에 대한 재계산을 직렬화한다.
+     *
+     * DELETE 후 INSERT 하는 구조라서, 같은 날 보정이 동시에 들어오면 양쪽이
+     * 모두 지우고 모두 넣어 (user, work_date) 유니크 제약을 위반한다.
+     * Postgres 에러가 사용자 화면에 그대로 나가므로 트랜잭션 잠금으로 막는다.
+     */
+    await tx.execute(sql`select pg_advisory_xact_lock(hashtext(${userId}))`);
+
     await tx
       .delete(workDays)
       .where(
