@@ -506,6 +506,33 @@ export const periodSnapshots = pgTable(
 );
 
 /**
+ * 로그인 시도 기록.
+ *
+ * 비밀번호 무차별 대입을 막는다. scrypt 가 느려서 초당 시도 수는 낮지만,
+ * 그것만으로는 잠금이 아니다.
+ *
+ * 비밀번호는 당연히 저장하지 않는다. IP 는 개인정보이므로 24시간만 두고
+ * 로그인 시점에 오래된 행을 지운다.
+ */
+export const loginAttempts = pgTable(
+  "login_attempts",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    /** 존재하지 않는 사번도 기록한다 — 스캐닝을 보려면 필요하다 */
+    employeeNo: text("employee_no").notNull(),
+    ip: text("ip"),
+    succeeded: boolean("succeeded").notNull(),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+  },
+  (t) => [
+    index("login_attempts_employee").on(t.employeeNo, t.createdAt),
+    index("login_attempts_ip").on(t.ip, t.createdAt),
+  ],
+);
+
+/**
  * 알림.
  *
  * append-only 가 아니다 — 알림은 감사 기록이 아니라 "할 일" 목록이므로,

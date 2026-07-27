@@ -1,6 +1,6 @@
 "use server";
 
-import { cookies } from "next/headers";
+import { cookies, headers } from "next/headers";
 import { redirect } from "next/navigation";
 import { login, logout, SESSION_COOKIE } from "@/db/auth";
 
@@ -10,9 +10,17 @@ export async function loginAction(
   _prev: LoginState,
   form: FormData,
 ): Promise<LoginState> {
+  // 프록시 뒤에서는 x-forwarded-for 첫 값이 클라이언트다. 로컬에선 없을 수 있다.
+  const h = await headers();
+  const ip =
+    h.get("x-forwarded-for")?.split(",")[0]?.trim() ||
+    h.get("x-real-ip") ||
+    null;
+
   const result = await login(
     String(form.get("employeeNo") ?? ""),
     String(form.get("password") ?? ""),
+    ip,
   );
 
   if (!result.ok) return { message: result.message };
