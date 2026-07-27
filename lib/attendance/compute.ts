@@ -113,15 +113,17 @@ function isHolidayDate(workDate: string, rules: AttendanceRules): boolean {
 }
 
 /**
- * 시각이 확정된 하루를 요약한다. computeWorkDays와 applyAdjustment가 같은 계산을
- * 쓰도록 여기 한 군데로 모은다.
+ * 보정용 하루 요약.
+ *
+ * 세션 기반 계산은 sessions.ts 가 한다. 여기는 보정이 시각을 덮어썼을 때
+ * 하나의 구간으로 다시 계산하는 경우만 다룬다 — 보정은 "이 날 이 시각부터
+ * 이 시각까지" 형태이므로 구간이 하나다.
  */
 function summarize(
   workDate: string,
   firstInAt: Date,
   lastOutAt: Date,
-  tagCount: number,
-  status: "computed" | "adjusted",
+  base: ComputedDay | null,
   rules: AttendanceRules,
 ): ComputedDay {
   const zone = rules.timezone;
@@ -136,26 +138,21 @@ function summarize(
   const outAt = DateTime.fromJSDate(lastOutAt, { zone });
   const flags: DayFlag[] = [];
 
-  // 의무근로시간대는 체류 구간에 완전히 포함되어야 한다.
-  // 휴일에는 코어타임이 적용되지 않는다.
   if (rules.coreTime && !isHoliday) {
     const core = bandInterval(workDate, rules.coreTime, zone);
     if (inAt > core.start! || outAt < core.end!) {
       flags.push("core_time_violation");
     }
   }
-
   if (rules.flexBand) {
     const band = bandInterval(workDate, rules.flexBand, zone);
     if (inAt < band.start! || outAt > band.end!) {
       flags.push("outside_flex_band");
     }
   }
-
   if (rules.dailyLimitMinutes !== null && workMinutes > rules.dailyLimitMinutes) {
     flags.push("over_daily_limit");
   }
-
   if (isHoliday) flags.push("holiday_work");
 
   return {
@@ -168,85 +165,32 @@ function summarize(
     nightMinutes: nightMinutesFor(firstInAt, lastOutAt, rules),
     isHoliday,
     flags,
-    status,
-    tagCount,
+    status: "adjusted",
+    tagCount: base?.tagCount ?? 0,
+    sessionCount: base?.sessionCount ?? 1,
+    // 보정으로 시각이 확정되면 더는 진행 중이 아니다
+    openSince: null,
   };
 }
 
-/** 퇴근 시각을 모르는 하루. 집계에서 제외하고 본인이 보정하게 한다. */
-function incompleteDay(
-  workDate: string,
-  firstInAt: Date | null,
-  tagCount: number,
-  rules: AttendanceRules,
-  extraFlags: DayFlag[] = [],
-): ComputedDay {
+/** 기록이 아예 없는 날 (외근·출장 보정의 바탕) */
+function emptyDay(workDate: string, rules: AttendanceRules): ComputedDay {
   return {
     workDate,
-    firstInAt,
+    firstInAt: null,
     lastOutAt: null,
     stayMinutes: 0,
     breakMinutes: 0,
     workMinutes: 0,
     nightMinutes: 0,
     isHoliday: isHolidayDate(workDate, rules),
-    flags: extraFlags,
+    flags: [],
     status: "incomplete",
-    tagCount,
+    tagCount: 0,
+    sessionCount: 0,
+    openSince: null,
   };
 }
-
-/**
- * 원본 태그 → 일별 근무 집계.
- *
- * 규칙: 일별 첫 태그 = 시작, 마지막 태그 = 종료. 중간 이탈(점심·흡연·층간 이동)은
- * 무시한다. 하루에 태그가 6~10번 찍히는 게 정상이고, 그걸 다 쪼개면 분 단위 감시가
- * 되어 자율출근제 취지와 정반대가 된다.
- */
-export function computeWorkDays(
-  tags: TagInput[],
-  rules: AttendanceRules,
-): ComputedDay[] {
-  const groups = new Map<string, TagInput[]>();
-  for (const tag of tags) {
-    const workDate = resolveWorkDate(tag.occurredAt, rules);
-    const bucket = groups.get(workDate);
-    if (bucket) bucket.push(tag);
-    else groups.set(workDate, [tag]);
-  }
-
-  const days: ComputedDay[] = [];
-  for (const [workDate, dayTags] of groups) {
-    const sorted = [...dayTags].sort(
-      (a, b) => a.occurredAt.getTime() - b.occurredAt.getTime(),
-    );
-    const first = sorted[0].occurredAt;
-    const last = sorted[sorted.length - 1].occurredAt;
-
-    // 태그가 1개면 퇴근 시각을 모른다. 8시간 같은 값을 임의로 채우면 근태 데이터
-    // 신뢰가 통째로 깨진다. 미완료로 남기고 집계에서 제외한다.
-    if (sorted.length === 1) {
-      days.push(incompleteDay(workDate, first, 1, rules));
-      continue;
-    }
-
-    // 지문이 두 번 인식되는 등으로 태그는 여럿인데 체류가 0분인 경우.
-    // 태그 1개와 사실상 같으므로 미완료로 두되, 사유를 구분해 남긴다.
-    if (last.getTime() === first.getTime()) {
-      days.push(
-        incompleteDay(workDate, first, sorted.length, rules, ["zero_stay"]),
-      );
-      continue;
-    }
-
-    days.push(
-      summarize(workDate, first, last, sorted.length, "computed", rules),
-    );
-  }
-
-  return days.sort((a, b) => a.workDate.localeCompare(b.workDate));
-}
-
 /**
  * 보정 적용. base가 null이면 태그가 아예 없는 날(외근·출장)이다.
  *
@@ -258,7 +202,7 @@ export function applyAdjustment(
   adj: AdjustmentInput,
   rules: AttendanceRules,
 ): ComputedDay {
-  const fallback = incompleteDay(adj.workDate, null, 0, rules);
+  const fallback = emptyDay(adj.workDate, rules);
 
   // 취소는 삭제가 아니라 새 행이다. 원본 계산 결과로 되돌린다.
   if (adj.kind === "revert") return base ?? fallback;
@@ -270,14 +214,7 @@ export function applyAdjustment(
 
   // 시각이 확정됐으면 체류·휴게·야간·위반을 전부 다시 계산한다
   if (firstInAt && lastOutAt) {
-    const recomputed = summarize(
-      adj.workDate,
-      firstInAt,
-      lastOutAt,
-      day.tagCount,
-      "adjusted",
-      rules,
-    );
+    const recomputed = summarize(adj.workDate, firstInAt, lastOutAt, day, rules);
     return {
       ...recomputed,
       workMinutes: recomputed.workMinutes + addedMinutes,
@@ -292,5 +229,6 @@ export function applyAdjustment(
     lastOutAt,
     workMinutes: Math.max(0, addedMinutes),
     status: "adjusted",
+    openSince: null,
   };
 }

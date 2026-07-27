@@ -35,6 +35,8 @@ const day = (stayMinutes: number): ComputedDay => ({
   flags: [],
   status: "computed",
   tagCount: 2,
+  sessionCount: 1,
+  openSince: null,
 });
 
 describe("estimateCheckout — 미완료를 0분으로 두지 않는다", () => {

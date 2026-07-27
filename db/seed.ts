@@ -18,6 +18,7 @@ import {
   timeOff,
   users,
   workDays,
+  workSessions,
 } from "./schema";
 import { recomputeWorkDays } from "./recompute";
 import { syncNotifications } from "./notify";
@@ -27,6 +28,7 @@ import {
   demoAttendanceRules,
   demoPeople,
   demoPeriods,
+  demoSessionsFor,
   demoTagsFor,
 } from "@/lib/seed";
 import { now } from "@/lib/clock";
@@ -53,6 +55,7 @@ async function reset() {
   await db.delete(timeOff);
   await db.delete(dayAdjustments);
   await db.delete(workDays);
+  await db.delete(workSessions);
   await db.delete(attendanceLogs);
   await db.delete(importBatches);
   await db.delete(users);
@@ -135,6 +138,24 @@ async function main() {
     tagCount += tags.length;
   }
 
+  // 앱에서 직접 찍은 구간 — 나눠 근무 / 종료 깜빡한 경우를 화면에서 볼 수 있게
+  let sessionCount = 0;
+  for (const s of demoSessionsFor(asOf)) {
+    const user = idByNo.get(s.employeeNo);
+    if (!user) continue;
+    await db.insert(workSessions).values({
+      orgId: org.id,
+      userId: user.id,
+      workDate: s.workDate,
+      startedAt: s.startedAt,
+      endedAt: s.endedAt,
+      source: s.source,
+      closedManually: s.closedManually,
+      closedNote: s.closedNote,
+    });
+    sessionCount += 1;
+  }
+
   for (const range of [twoAgo, last, current]) {
     await db.insert(settlementPeriods).values({
       orgId: org.id,
@@ -160,7 +181,9 @@ async function main() {
 
   console.log(`오늘: ${today}`);
   console.log(`정산기간: ${twoAgo.start} ~ ${current.end} (주 3개)`);
-  console.log(`사용자 ${demoPeople.length}명 · 태그 ${tagCount}건 · work_days ${dayRows}건`);
+  console.log(
+    `사용자 ${demoPeople.length}명 · 태그 ${tagCount}건 · 앱 근무구간 ${sessionCount}건 · work_days ${dayRows}건`,
+  );
   console.log(`로그인 비밀번호: ${DEMO_PASSWORD}`);
   for (const p of demoPeople) {
     console.log(`  ${p.employeeNo}  ${p.name.padEnd(4)} ${p.role}`);

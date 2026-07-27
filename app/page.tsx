@@ -5,9 +5,15 @@ import type { ComputedDay, DayFlag } from "@/lib/attendance/types";
 import { isFixedClock, now } from "@/lib/clock";
 import { loadOrgRules, loadTimeOff, loadWorkDays } from "@/db/access";
 import { loadPeriodState } from "@/db/close";
+import { danglingSession } from "@/db/checkin";
 import Link from "next/link";
+import {
+  leaveTimeFor,
+  minutesIncludingOpen,
+} from "@/lib/attendance/sessions";
 import { requestViewer } from "./viewer";
 import { PeriodNav } from "./period-nav";
+import { TodayCard } from "./today-card";
 
 // DB를 읽으므로 빌드 시점에 프리렌더하지 않는다
 export const dynamic = "force-dynamic";
@@ -67,9 +73,9 @@ const label = (date: string, zone: string) => {
 export default async function Page({
   searchParams,
 }: {
-  searchParams: Promise<{ period?: string }>;
+  searchParams: Promise<{ period?: string; msg?: string; err?: string }>;
 }) {
-  const { period } = await searchParams;
+  const { period, msg, err } = await searchParams;
   const viewer = await requestViewer("/");
   const rules = await loadOrgRules(viewer.orgId);
   const zone = rules.attendance.timezone;
@@ -110,6 +116,24 @@ export default async function Page({
     range,
     summary,
   );
+
+  /**
+   * 오늘 카드.
+   *
+   * "오늘 몇 시에 퇴근해도 되나" — 자율출근제 직원이 매일 갖는 질문이고,
+   * 앱을 여는 이유다. 앱에서 근무 시작을 받으니 이제 답할 수 있다.
+   */
+  const todayDay = byDate.get(asOfDate) ?? null;
+  const todayMinutes = todayDay
+    ? minutesIncludingOpen(todayDay, rules.attendance, asOf)
+    : 0;
+  // 어제 종료를 깜빡한 근무. 이게 남아 있으면 새 근무를 시작할 수 없으므로
+  // 버튼을 눌러서 알게 되는 게 아니라 카드에 먼저 띄운다.
+  const dangling = isCurrent ? await danglingSession(viewer.id, rules) : null;
+  const isTodayBusiness =
+    !rules.attendance.weekendDays.includes(
+      DateTime.fromJSDate(asOf, { zone }).weekday,
+    ) && !rules.attendance.holidays.includes(asOfDate);
 
   const paceGap = summary.projectedMinutes - summary.targetMinutes;
   const paceNote =
@@ -158,6 +182,37 @@ export default async function Page({
           ? `${nextDow}요일 하루 남음 — 하루 ${hm(requiredPerDay)} 필요`
           : `영업일 ${summary.remainingBusinessDays}일 남음 — 하루 ${hm(requiredPerDay)} 필요`;
 
+  // 오늘 채워야 하는 몫과, 그러려면 언제 종료하면 되는지
+  const neededToday = Math.max(0, requiredPerDay - todayMinutes);
+  const leaveAt = todayDay?.openSince
+    ? leaveTimeFor({
+        openSince: todayDay.openSince,
+        asOf,
+        neededMinutes: neededToday,
+        rules: rules.attendance,
+      })
+    : null;
+
+  const todayView = {
+    isWorking: Boolean(todayDay?.openSince),
+    openSince: todayDay?.openSince ?? null,
+    sessionCount: todayDay
+      ? todayDay.sessionCount - (todayDay.openSince ? 1 : 0)
+      : 0,
+    todayMinutes,
+    neededToday,
+    leaveAt,
+    note: !isTodayBusiness
+      ? "오늘은 영업일이 아닙니다. 일한 시간은 휴일 근무로 집계됩니다."
+      : summary.remainingMinutes === 0
+        ? "이번 정산기간 목표를 이미 채웠습니다."
+        : null,
+    dangling: dangling
+      ? { workDate: dangling.workDate, startedAt: dangling.startedAt }
+      : null,
+    zone,
+  };
+
   const core = rules.attendance.coreTime;
   const from = DateTime.fromISO(range.start, { zone });
   const to = DateTime.fromISO(range.end, { zone });
@@ -197,6 +252,25 @@ export default async function Page({
           {importedThrough}
         </span>
       </p>
+
+      {(msg || err) && (
+        <section className="card">
+          <ul className="issues">
+            <li>
+              <span
+                className={`icon ${err ? "crit" : "warn"}`}
+                aria-hidden="true"
+              >
+                !
+              </span>
+              <span className="what">{err ?? msg}</span>
+            </li>
+          </ul>
+        </section>
+      )}
+
+      {/* 오늘 카드는 이번 기간을 볼 때만. 지난 기간에 근무 시작 버튼은 뜻이 없다 */}
+      {isCurrent && <TodayCard view={todayView} />}
 
       {/*
         히어로 우선순위: 법정 위반 > 목표 달성 > 남은 시간.
@@ -382,8 +456,9 @@ export default async function Page({
                     </span>
                     <br />
                     <span className="why">
-                      {clock(d?.firstInAt ?? null, zone)}~
-                      {clock(d?.lastOutAt ?? null, zone)} 근무
+                      {d && d.sessionCount > 1
+                        ? `${d.sessionCount}번 나눠 근무 · 실근무 ${hm(d.workMinutes)}`
+                        : `${clock(d?.firstInAt ?? null, zone)}~${clock(d?.lastOutAt ?? null, zone)} 근무`}
                       {core
                         ? ` · 의무근로시간대는 ${core.start}~${core.end}입니다.`
                         : ""}
@@ -457,7 +532,10 @@ export default async function Page({
                 <div className="tip">
                   {l.md}({l.dow}) · 실근무 {hm(d.workMinutes)}
                   <br />
-                  {clock(d.firstInAt, zone)}~{clock(d.lastOutAt, zone)} · 휴게{" "}
+                  {d.sessionCount > 1
+                    ? `${d.sessionCount}번 나눠 근무`
+                    : `${clock(d.firstInAt, zone)}~${clock(d.lastOutAt, zone)}`}
+                  {" · 휴게 "}
                   {hm(d.breakMinutes)}
                 </div>
               </div>
@@ -486,8 +564,13 @@ export default async function Page({
           <thead>
             <tr>
               <th>날짜</th>
-              <th>출근</th>
-              <th>퇴근</th>
+              {/*
+                나눠 일한 날이 있으므로 "출근/퇴근"이라고 쓰면 안 된다.
+                09~12 + 19~21 인 날의 09 와 21 은 하루의 양끝일 뿐이고,
+                그 사이를 근무로 읽으면 안 된다 — 실근무 열이 정답이다.
+              */}
+              <th>첫 시작</th>
+              <th>마지막 종료</th>
               <th>체류</th>
               <th>휴게</th>
               <th>실근무</th>
@@ -526,6 +609,12 @@ export default async function Page({
                   <td>
                     {d.status === "incomplete" && (
                       <span className="tag">미완료</span>
+                    )}
+                    {d.status === "open" && (
+                      <span className="tag">근무 중</span>
+                    )}
+                    {d.sessionCount > 1 && (
+                      <span className="tag">{d.sessionCount}번 나눠 근무</span>
                     )}
                     {d.flags.map((f) => (
                       <span className="tag" key={f}>

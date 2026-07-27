@@ -3,6 +3,7 @@
 import { redirect } from "next/navigation";
 import { revalidatePath } from "next/cache";
 import { createAdjustment, revertAdjustment } from "@/db/adjust";
+import { closeSessionManually } from "@/db/checkin";
 import { requestViewer } from "../viewer";
 import { rethrowControlFlow } from "../action-error";
 
@@ -26,9 +27,20 @@ export async function recordsAction(form: FormData) {
     const viewer = await requestViewer();
     const workDate = str(form, "workDate");
 
-    if (str(form, "op") === "revert") {
+    const op = str(form, "op");
+
+    if (op === "revert") {
       await revertAdjustment(viewer, viewer.id, workDate, "보정 취소");
       query = `msg=${encodeURIComponent(`${workDate} 보정을 취소했습니다. 원본 기록으로 돌아갑니다.`)}`;
+    } else if (op === "closeSession") {
+      const r = await closeSessionManually(viewer, {
+        sessionId: str(form, "sessionId"),
+        endedAt: str(form, "endedAt"),
+        note: str(form, "note"),
+      });
+      const h = Math.floor(r.minutes / 60);
+      const m = r.minutes % 60;
+      query = `msg=${encodeURIComponent(`${r.workDate} 근무를 ${h}시간 ${m}분으로 마감했습니다.`)}`;
     } else {
       const minutes = str(form, "addedMinutes").trim();
       await createAdjustment(viewer, viewer.id, {

@@ -79,6 +79,8 @@ async function summaryFor(
     flags: r.flags,
     status: r.status,
     tagCount: r.tagCount,
+      sessionCount: r.sessionCount,
+      openSince: r.openSince,
   }));
 
   return computePeriodSummary(

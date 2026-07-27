@@ -1,12 +1,8 @@
 import { describe, expect, it } from "vitest";
 import { DateTime } from "luxon";
-import {
-  applyAdjustment,
-  breakMinutesFor,
-  computeWorkDays,
-  nightMinutesFor,
-} from "./compute";
-import type { AttendanceRules } from "./types";
+import { applyAdjustment, breakMinutesFor, nightMinutesFor } from "./compute";
+import { computeWorkDays as computeFromSessions } from "./sessions";
+import type { AttendanceRules, ComputedDay, TagInput } from "./types";
 
 /**
  * 기준 규칙: 선택적 근로시간제를 운영하는 회사의 전형적 설정.
@@ -39,6 +35,21 @@ const withRules = (o: Partial<AttendanceRules>): AttendanceRules => ({
 const kst = (iso: string) =>
   DateTime.fromISO(iso, { zone: "Asia/Seoul" }).toJSDate();
 const tag = (iso: string) => ({ occurredAt: kst(iso) });
+
+/**
+ * 이 파일의 태그는 in/out 방향이 없다 — 사원증 단말이 방향을 안 주는 경우다.
+ * 그 경로에서는 날짜별 첫~마지막이 한 세션이 되고, 여기서 검증하는 규칙
+ * (날짜 귀속·휴게·야간·코어타임·상한)은 세션 개수와 무관하게 같아야 한다.
+ *
+ * asOf 를 테스트 날짜보다 뒤로 고정한다. "오늘"이면 열린 세션이 open 으로
+ * 남아서 위반 판정을 미루기 때문에 결과가 실행일에 따라 달라진다.
+ */
+const AS_OF = kst("2026-04-01T09:00");
+const computeWorkDays = (
+  tags: TagInput[],
+  rules: AttendanceRules,
+): ComputedDay[] => computeFromSessions({ tags, sessions: [] }, rules, AS_OF);
+
 /** 하루 출퇴근 한 건 */
 const day = (date: string, inHm: string, outHm: string) =>
   computeWorkDays([tag(`${date}T${inHm}`), tag(`${date}T${outHm}`)], base)[0];
@@ -97,7 +108,7 @@ describe("날짜 귀속 — 정산 단위가 흔들리지 않게", () => {
 });
 
 // ─────────────────────────────────────────────────────────────
-describe("일별 집계 — 첫 태그와 마지막 태그만", () => {
+describe("방향 없는 태그 — 날짜별 첫~마지막을 한 구간으로 본다", () => {
   it("중간 이탈(점심·흡연·층간 이동)은 무시한다", () => {
     const days = computeWorkDays(
       [

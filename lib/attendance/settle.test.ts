@@ -48,6 +48,8 @@ const d = (
   flags: [],
   status: "computed",
   tagCount: 2,
+  sessionCount: 1,
+  openSince: null,
   ...over,
 });
 

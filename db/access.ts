@@ -259,6 +259,8 @@ export async function loadWorkDays(
     flags: r.flags,
     status: r.status,
     tagCount: r.tagCount,
+      sessionCount: r.sessionCount,
+      openSince: r.openSince,
   }));
 }
 

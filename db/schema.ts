@@ -46,9 +46,16 @@ export const userRole = pgEnum("user_role", [
 export const logSource = pgEnum("log_source", ["import", "manual"]);
 export const logDirection = pgEnum("log_direction", ["in", "out", "unknown"]);
 export const workDayStatus = pgEnum("work_day_status", [
-  "computed", // 태그로 정상 계산됨
+  "computed", // 세션이 모두 닫힘 — 확정
   "adjusted", // 보정이 적용됨
-  "incomplete", // 태그가 1개뿐 — 퇴근 미기록
+  "incomplete", // 지난 날에 열린 세션이 남음 — 퇴근 미기록
+  "open", // 오늘 진행 중 (근무 중)
+]);
+/** 근무 세션이 어디서 왔는지. app = 앱에서 직접 체크인 */
+export const sessionSource = pgEnum("session_source", [
+  "app",
+  "import",
+  "manual",
 ]);
 export const adjustmentKind = pgEnum("adjustment_kind", [
   "field_work", // 외근·출장
@@ -298,6 +305,51 @@ export const attendanceLogs = pgTable(
 );
 
 /**
+ * 근무 세션.
+ *
+ * 기획서 요구: "하루에 여러 번 나눠서 일하는 경우(오전 3h + 저녁 2h) 지원".
+ * 첫 태그~마지막 태그로 계산하면 낮에 일하지 않은 시간까지 근무로 센다.
+ *
+ * endedAt 이 null 이면 진행 중이다. 앱 체크인은 여기에 쌓이고, 사원증 태그는
+ * attendance_logs 에 그대로 남아 계산 시점에 세션으로 변환된다 —
+ * 원본을 건드리지 않는 원칙은 유지한다.
+ */
+export const workSessions = pgTable(
+  "work_sessions",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    orgId: uuid("org_id")
+      .notNull()
+      .references(() => orgs.id),
+    userId: uuid("user_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    /** dayBoundaryHour 기준으로 귀속된 날짜 */
+    workDate: date("work_date", { mode: "string" }).notNull(),
+    startedAt: timestamp("started_at", { withTimezone: true }).notNull(),
+    /** null = 진행 중 */
+    endedAt: timestamp("ended_at", { withTimezone: true }),
+    source: sessionSource("source").notNull().default("app"),
+    /**
+     * 종료를 깜빡해서 나중에 손으로 닫은 세션.
+     *
+     * 원본을 덮어쓰는 것이므로 흔적을 남긴다 — 기획서 1번의 "수정 이력 남김".
+     * 보정(day_adjustments)으로 다루지 않는 이유는, 세션을 제대로 닫으면
+     * 계산이 저절로 맞아서 하루 전체를 덮어쓸 이유가 없기 때문.
+     */
+    closedManually: boolean("closed_manually").notNull().default(false),
+    closedNote: text("closed_note").notNull().default(""),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+  },
+  (t) => [
+    index("work_sessions_user_date").on(t.userId, t.workDate),
+    index("work_sessions_open").on(t.userId, t.endedAt),
+  ],
+);
+
+/**
  * 일별 집계. 파생 데이터이므로 언제든 원본에서 재계산 가능해야 한다.
  * workDate는 dayBoundaryHour 기준으로 귀속된 날짜.
  */
@@ -328,6 +380,10 @@ export const workDays = pgTable(
 
     status: workDayStatus("status").notNull().default("computed"),
     tagCount: integer("tag_count").notNull().default(0),
+    /** 그 날 근무 세션 수. 하루 여러 번 나눠 일하면 2 이상 */
+    sessionCount: integer("session_count").notNull().default(0),
+    /** 진행 중 세션의 시작 시각. 있으면 "근무 중" */
+    openSince: timestamp("open_since", { withTimezone: true }),
 
     computedAt: timestamp("computed_at", { withTimezone: true })
       .notNull()

@@ -2,7 +2,9 @@ import { and, asc, eq, gte, inArray, lte, ne } from "drizzle-orm";
 import { db } from "./client";
 import { accessLogs, dayAdjustments, teams, timeOff, users, workDays } from "./schema";
 import { AccessDenied, loadOrgRules, type OrgRules, type Viewer } from "./access";
+import { openSessionsForUsers } from "./checkin";
 import { computePeriodSummary, type PeriodSummary } from "@/lib/attendance/settle";
+import { resolveWorkDate } from "@/lib/attendance/compute";
 import type { PeriodRange } from "@/lib/attendance/period";
 import type { ComputedDay } from "@/lib/attendance/types";
 
@@ -13,11 +15,24 @@ import type { ComputedDay } from "@/lib/attendance/types";
  * 소수만 눈에 띄게 만든다. 개인 상세는 여기서 링크로 들어간다.
  */
 
+/**
+ * 지금 근무 중인지.
+ *
+ * "off" 를 "퇴근"이라고 쓰지 않는다 — 아직 출근을 안 한 것과 이미 끝낸 것이
+ * 자율 출근제에서는 구분되지 않고, 구분하는 척하면 감시처럼 읽힌다.
+ * stale 은 어제 세션이 안 닫힌 것으로, 재실이 아니라 본인이 고쳐야 할 상태다.
+ */
+export type Presence =
+  | { state: "working"; since: Date }
+  | { state: "stale"; since: Date; workDate: string }
+  | { state: "off" };
+
 export type MemberRow = {
   userId: string;
   name: string;
   employeeNo: string;
   teamName: string | null;
+  presence: Presence;
   summary: PeriodSummary;
   review: {
     incomplete: number;
@@ -95,7 +110,7 @@ export async function loadTeamRows(
   if (ids.length === 0) return [];
 
   // N+1을 피한다. 200명이면 사람마다 쿼리하면 400번이 된다.
-  const [people, dayRows, offRows, adjRows] = await Promise.all([
+  const [people, dayRows, offRows, adjRows, openSessions] = await Promise.all([
     db
       .select({
         id: users.id,
@@ -150,7 +165,10 @@ export async function loadTeamRows(
           ne(dayAdjustments.kind, "revert"),
         ),
       ),
+    openSessionsForUsers(ids),
   ]);
+
+  const today = resolveWorkDate(asOf, rules.attendance);
 
   const daysByUser = new Map<string, ComputedDay[]>();
   for (const r of dayRows) {
@@ -167,6 +185,8 @@ export async function loadTeamRows(
       flags: r.flags,
       status: r.status,
       tagCount: r.tagCount,
+      sessionCount: r.sessionCount,
+      openSince: r.openSince,
     });
     daysByUser.set(r.userId, list);
   }
@@ -230,11 +250,19 @@ export async function loadTeamRows(
       (review.adjustmentOverThreshold ? 1 : 0) +
       review.zeroTagAdjustments;
 
+    const open = openSessions.get(person.id);
+    const presence: Presence = !open
+      ? { state: "off" }
+      : open.workDate >= today
+        ? { state: "working", since: open.startedAt }
+        : { state: "stale", since: open.startedAt, workDate: open.workDate };
+
     return {
       userId: person.id,
       name: person.name,
       employeeNo: person.employeeNo,
       teamName: person.teamName,
+      presence,
       summary,
       review,
     };

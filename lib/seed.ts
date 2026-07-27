@@ -92,6 +92,17 @@ const normalDay = (date: string, inHm: string, outHm: string): TagInput[] => [
   at(date, outHm),
 ];
 
+/** 앱으로만 근무를 찍은 날 (사원증 태그를 넣지 않는 날) */
+function appOnlyDates(asOf: Date) {
+  const days = businessDays(demoPeriods(asOf).last.start, demoPeriods(asOf).last.end);
+  return {
+    /** 이하람: 오전 + 저녁으로 나눠 근무 */
+    split: days[1],
+    /** 박준영: 종료를 누르지 않고 퇴근 */
+    forgot: days[4] ?? days[days.length - 1],
+  };
+}
+
 export type DemoTags = { employeeNo: string; tags: TagInput[] };
 
 /**
@@ -118,6 +129,10 @@ export function demoTagsFor(asOf: Date = now()): DemoTags[] {
     junyoung.push(...normalDay(d, "10:05", "20:10"));
   }
 
+  // 앱으로만 찍은 날은 사원증 태그를 넣지 않는다. 겹치면 계산은 맞지만
+  // (구간이 합쳐진다) 데모로서는 무슨 일이 있었는지 읽히지 않는다.
+  const appOnly = appOnlyDates(asOf);
+
   lastDays.forEach((d, i) => {
     if (i === 2) {
       // 코어타임(11:00~) 이후 출근 → 미준수
@@ -128,9 +143,9 @@ export function demoTagsFor(asOf: Date = now()): DemoTags[] {
     } else {
       dayun.push(...normalDay(d, "09:12", "19:05"));
     }
-    haram.push(...normalDay(d, "08:40", "18:20"));
+    if (d !== appOnly.split) haram.push(...normalDay(d, "08:40", "18:20"));
     // 박준영은 길게 일해서 주 52시간에 가까워진다
-    junyoung.push(...normalDay(d, "08:30", "22:30"));
+    if (d !== appOnly.forgot) junyoung.push(...normalDay(d, "08:30", "22:30"));
   });
 
   for (const d of currentDays) {
@@ -143,5 +158,57 @@ export function demoTagsFor(asOf: Date = now()): DemoTags[] {
     { employeeNo: "F2019-041", tags: dayun },
     { employeeNo: "F2016-008", tags: haram },
     { employeeNo: "F2021-117", tags: junyoung },
+  ];
+}
+
+export type DemoSession = {
+  employeeNo: string;
+  workDate: string;
+  startedAt: Date;
+  endedAt: Date | null;
+  source: "app" | "manual";
+  closedManually: boolean;
+  closedNote: string;
+};
+
+/**
+ * 앱에서 직접 찍은 근무 구간.
+ *
+ * 태그만 넣으면 기획서 1번(나눠 근무·종료 깜빡)이 화면에 안 나온다. 처음 켠
+ * 사람이 그 두 경우를 바로 볼 수 있게 지난주에 심어 둔다.
+ */
+export function demoSessionsFor(asOf: Date = now()): DemoSession[] {
+  const span = (date: string, hm: string) =>
+    DateTime.fromISO(`${date}T${hm}`, { zone: DEMO_ZONE }).toJSDate();
+  const { split, forgot } = appOnlyDates(asOf);
+
+  return [
+    {
+      employeeNo: "F2016-008",
+      workDate: split,
+      startedAt: span(split, "09:00"),
+      endedAt: span(split, "12:00"),
+      source: "app",
+      closedManually: false,
+      closedNote: "",
+    },
+    {
+      employeeNo: "F2016-008",
+      workDate: split,
+      startedAt: span(split, "19:00"),
+      endedAt: span(split, "21:00"),
+      source: "app",
+      closedManually: false,
+      closedNote: "",
+    },
+    {
+      employeeNo: "F2021-117",
+      workDate: forgot,
+      startedAt: span(forgot, "09:30"),
+      endedAt: null,
+      source: "app",
+      closedManually: false,
+      closedNote: "",
+    },
   ];
 }

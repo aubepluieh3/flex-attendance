@@ -1,16 +1,23 @@
 import { and, asc, desc, eq, gte, lte, sql } from "drizzle-orm";
 import { DateTime } from "luxon";
 import { db } from "./client";
-import { attendanceLogs, dayAdjustments, workDays } from "./schema";
-import { applyAdjustment, computeWorkDays } from "@/lib/attendance/compute";
+import {
+  attendanceLogs,
+  dayAdjustments,
+  workDays,
+  workSessions,
+} from "./schema";
+import { applyAdjustment } from "@/lib/attendance/compute";
+import { computeWorkDays, type WorkSession } from "@/lib/attendance/sessions";
 import type {
   AdjustmentInput,
   AttendanceRules,
   ComputedDay,
 } from "@/lib/attendance/types";
+import { now } from "@/lib/clock";
 
 /**
- * 원본 태그 → work_days 재계산.
+ * 원본(사원증 태그 + 앱 세션) → work_days 재계산.
  *
  * work_days는 파생 데이터라서 언제든 지우고 다시 만들 수 있다. 규칙이 바뀌면
  * 이 함수를 다시 돌리면 된다 — 그래서 계산 로직은 DB를 모르는 순수 함수로 두고,
@@ -23,36 +30,59 @@ export async function recomputeWorkDays(opts: {
   from: string;
   to: string;
   rules: AttendanceRules;
+  asOf?: Date;
 }): Promise<ComputedDay[]> {
   const { orgId, userId, from, to, rules } = opts;
+  const asOf = opts.asOf ?? now();
   const zone = rules.timezone;
 
-  // 귀속 기준시각(기본 05:00) 때문에 경계 밖 태그가 범위 안 날짜로 들어올 수 있다.
-  // 넉넉히 읽고 계산 후에 자른다.
+  // 귀속 기준시각(기본 05:00)과 자정 넘긴 세션 때문에 경계 밖 기록이 범위 안
+  // 날짜로 들어올 수 있다. 넉넉히 읽고 계산 후에 자른다.
   const queryFrom = DateTime.fromISO(from, { zone })
     .minus({ days: 1 })
     .toJSDate();
-  const queryTo = DateTime.fromISO(to, { zone })
-    .plus({ days: 2 })
-    .toJSDate();
+  const queryTo = DateTime.fromISO(to, { zone }).plus({ days: 2 }).toJSDate();
 
-  const logs = await db
-    .select({
-      occurredAt: attendanceLogs.occurredAt,
-      direction: attendanceLogs.direction,
-      deviceLabel: attendanceLogs.deviceLabel,
-    })
-    .from(attendanceLogs)
-    .where(
-      and(
-        eq(attendanceLogs.userId, userId),
-        gte(attendanceLogs.occurredAt, queryFrom),
-        lte(attendanceLogs.occurredAt, queryTo),
-      ),
-    )
-    .orderBy(asc(attendanceLogs.occurredAt));
+  const [logs, sessionRows] = await Promise.all([
+    db
+      .select({
+        occurredAt: attendanceLogs.occurredAt,
+        direction: attendanceLogs.direction,
+        deviceLabel: attendanceLogs.deviceLabel,
+      })
+      .from(attendanceLogs)
+      .where(
+        and(
+          eq(attendanceLogs.userId, userId),
+          gte(attendanceLogs.occurredAt, queryFrom),
+          lte(attendanceLogs.occurredAt, queryTo),
+        ),
+      )
+      .orderBy(asc(attendanceLogs.occurredAt)),
+    db
+      .select({
+        startedAt: workSessions.startedAt,
+        endedAt: workSessions.endedAt,
+        source: workSessions.source,
+      })
+      .from(workSessions)
+      .where(
+        and(
+          eq(workSessions.userId, userId),
+          gte(workSessions.startedAt, queryFrom),
+          lte(workSessions.startedAt, queryTo),
+        ),
+      )
+      .orderBy(asc(workSessions.startedAt)),
+  ]);
 
-  const computed = computeWorkDays(logs, rules).filter(
+  const sessions: WorkSession[] = sessionRows.map((r) => ({
+    startedAt: r.startedAt,
+    endedAt: r.endedAt,
+    source: r.source,
+  }));
+
+  const computed = computeWorkDays({ tags: logs, sessions }, rules, asOf).filter(
     (d) => d.workDate >= from && d.workDate <= to,
   );
 
@@ -82,7 +112,7 @@ export async function recomputeWorkDays(opts: {
   }
 
   const byDate = new Map(computed.map((d) => [d.workDate, d]));
-  // 태그가 없는 날에도 보정(외근·출장)만으로 근무 기록이 생길 수 있다
+  // 기록이 없는 날에도 보정(외근·출장)만으로 근무 기록이 생길 수 있다
   for (const [date, adj] of latestByDate) {
     byDate.set(date, applyAdjustment(byDate.get(date) ?? null, adj, rules));
   }
@@ -95,9 +125,8 @@ export async function recomputeWorkDays(opts: {
     /**
      * 같은 사람에 대한 재계산을 직렬화한다.
      *
-     * DELETE 후 INSERT 하는 구조라서, 같은 날 보정이 동시에 들어오면 양쪽이
-     * 모두 지우고 모두 넣어 (user, work_date) 유니크 제약을 위반한다.
-     * Postgres 에러가 사용자 화면에 그대로 나가므로 트랜잭션 잠금으로 막는다.
+     * DELETE 후 INSERT 하는 구조라서, 같은 날 보정이나 체크아웃이 동시에 들어오면
+     * 양쪽이 모두 지우고 모두 넣어 (user, work_date) 유니크 제약을 위반한다.
      */
     await tx.execute(sql`select pg_advisory_xact_lock(hashtext(${userId}))`);
 
@@ -128,6 +157,8 @@ export async function recomputeWorkDays(opts: {
         flags: d.flags,
         status: d.status,
         tagCount: d.tagCount,
+        sessionCount: d.sessionCount,
+        openSince: d.openSince,
       })),
     );
   });

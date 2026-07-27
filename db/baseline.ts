@@ -1,9 +1,10 @@
 import { and, asc, desc, eq, gte, lt, lte } from "drizzle-orm";
 import { DateTime } from "luxon";
 import { db } from "./client";
-import { attendanceLogs, workDays } from "./schema";
+import { attendanceLogs, workDays, workSessions } from "./schema";
 import type { OrgRules } from "./access";
-import { computeWorkDays } from "@/lib/attendance/compute";
+import { computeWorkDays } from "@/lib/attendance/sessions";
+import { now } from "@/lib/clock";
 import { estimateCheckout, type Estimate } from "@/lib/attendance/estimate";
 import type { ComputedDay } from "@/lib/attendance/types";
 
@@ -18,7 +19,7 @@ import type { ComputedDay } from "@/lib/attendance/types";
  *   태그가 아예 없는 날 → 1일 소정근로 (평범한 8시간 외근은 벗어남 0)
  */
 
-/** 그 날 태그만으로 계산한 하루 (보정 반영 안 함) */
+/** 그 날 원본(태그 + 앱 세션)만으로 계산한 하루 — 보정은 반영하지 않는다 */
 async function rawDay(
   userId: string,
   workDate: string,
@@ -28,25 +29,45 @@ async function rawDay(
   const from = DateTime.fromISO(workDate, { zone }).minus({ days: 1 }).toJSDate();
   const to = DateTime.fromISO(workDate, { zone }).plus({ days: 2 }).toJSDate();
 
-  const logs = await db
-    .select({
-      occurredAt: attendanceLogs.occurredAt,
-      direction: attendanceLogs.direction,
-      deviceLabel: attendanceLogs.deviceLabel,
-    })
-    .from(attendanceLogs)
-    .where(
-      and(
-        eq(attendanceLogs.userId, userId),
-        gte(attendanceLogs.occurredAt, from),
-        lte(attendanceLogs.occurredAt, to),
-      ),
-    )
-    .orderBy(asc(attendanceLogs.occurredAt));
+  const [logs, sessionRows] = await Promise.all([
+    db
+      .select({
+        occurredAt: attendanceLogs.occurredAt,
+        direction: attendanceLogs.direction,
+        deviceLabel: attendanceLogs.deviceLabel,
+      })
+      .from(attendanceLogs)
+      .where(
+        and(
+          eq(attendanceLogs.userId, userId),
+          gte(attendanceLogs.occurredAt, from),
+          lte(attendanceLogs.occurredAt, to),
+        ),
+      )
+      .orderBy(asc(attendanceLogs.occurredAt)),
+    db
+      .select({
+        startedAt: workSessions.startedAt,
+        endedAt: workSessions.endedAt,
+        source: workSessions.source,
+      })
+      .from(workSessions)
+      .where(
+        and(
+          eq(workSessions.userId, userId),
+          gte(workSessions.startedAt, from),
+          lte(workSessions.startedAt, to),
+        ),
+      )
+      .orderBy(asc(workSessions.startedAt)),
+  ]);
 
   return (
-    computeWorkDays(logs, rules.attendance).find((d) => d.workDate === workDate) ??
-    null
+    computeWorkDays(
+      { tags: logs, sessions: sessionRows },
+      rules.attendance,
+      now(),
+    ).find((d) => d.workDate === workDate) ?? null
   );
 }
 
@@ -87,6 +108,8 @@ async function recentCompleted(
     flags: r.flags,
     status: r.status,
     tagCount: r.tagCount,
+      sessionCount: r.sessionCount,
+      openSince: r.openSince,
   }));
 }
 

@@ -47,7 +47,13 @@ export type TagInput = {
   deviceLabel?: string | null;
 };
 
-export type WorkDayStatus = "computed" | "adjusted" | "incomplete";
+export type WorkDayStatus =
+  | "computed"
+  | "adjusted"
+  /** 지난 날에 열린 세션이 남아 있다 — 체크아웃 누락 */
+  | "incomplete"
+  /** 오늘 진행 중 (근무 중) */
+  | "open";
 
 /** 팀장 "확인 필요" 목록에 올릴 사유 */
 export type DayFlag =
@@ -76,6 +82,10 @@ export type ComputedDay = {
   flags: DayFlag[];
   status: WorkDayStatus;
   tagCount: number;
+  /** 그 날의 근무 세션 수. 하루 여러 번 나눠 일하면 2 이상이 된다 */
+  sessionCount: number;
+  /** 진행 중인 세션의 시작 시각. null 이면 진행 중인 세션이 없다 */
+  openSince: Date | null;
 };
 
 export type AdjustmentInput = {

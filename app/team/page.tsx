@@ -74,6 +74,35 @@ export default async function TeamPage({
   const from = DateTime.fromISO(range.start, { zone });
   const to = DateTime.fromISO(range.end, { zone });
   const needsReview = rows.filter((r) => r.review.total > 0);
+  const working = rows.filter((r) => r.presence.state === "working");
+
+  const clock = (d: Date) =>
+    DateTime.fromJSDate(d, { zone }).toFormat("HH:mm");
+
+  /**
+   * 재실 표시는 이번 기간을 볼 때만. 지난주 화면에 "근무 중"이 뜨면
+   * 그게 지금인지 그때인지 알 수 없다.
+   */
+  const presenceCell = (p: (typeof rows)[number]["presence"]) => {
+    if (!isCurrent) return <span className="none">—</span>;
+    if (p.state === "working") {
+      return (
+        <span className="status good inline">
+          <span className="dot" aria-hidden="true" />
+          근무 중 · {clock(p.since)}~
+        </span>
+      );
+    }
+    if (p.state === "stale") {
+      return (
+        <span className="status warn inline">
+          <span className="dot" aria-hidden="true" />
+          종료 안 됨
+        </span>
+      );
+    }
+    return <span className="none">오프</span>;
+  };
 
   return (
     <main className="page">
@@ -96,6 +125,7 @@ export default async function TeamPage({
           isCurrent={isCurrent}
         />
         {" · 구성원 "}{rows.length}명
+        {isCurrent && ` · 지금 근무 중 ${working.length}명`}
         <br />
         <span className="dim">
           {needsReview.length > 0
@@ -114,6 +144,7 @@ export default async function TeamPage({
             <thead>
               <tr>
                 <th>이름</th>
+                <th>상태</th>
                 <th>팀</th>
                 <th>실근무</th>
                 <th>소정근로</th>
@@ -127,6 +158,7 @@ export default async function TeamPage({
                   <td>
                     <Link href={`/team/${r.userId}`}>{r.name}</Link>
                   </td>
+                  <td>{presenceCell(r.presence)}</td>
                   <td className="none">{r.teamName ?? "—"}</td>
                   <td>{hm(r.summary.workedMinutes)}</td>
                   <td className="none">{hm(r.summary.targetMinutes)}</td>

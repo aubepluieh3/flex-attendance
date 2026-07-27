@@ -432,6 +432,11 @@ code {
   padding: 4px 11px 4px 9px;
   border-radius: var(--radius-pill);
 }
+/* 표 안에서는 히어로 카드용 위 여백이 필요 없다 */
+.status.inline {
+  margin-top: 0;
+  white-space: nowrap;
+}
 .status .dot {
   width: 7px;
   height: 7px;
@@ -841,6 +846,35 @@ button.pill:hover {
   color: var(--ink-2);
 }
 .day-sum.none {
+  color: var(--ink-3);
+}
+
+/* 하루 안의 근무 구간들. 나눠 일한 날은 여기서 형태가 보여야 한다. */
+.sessions {
+  list-style: none;
+  margin: 0 0 12px;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.sessions li {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 10px;
+  font-size: 13px;
+  padding: 6px 10px;
+  border-radius: 8px;
+  background: var(--surface-2);
+}
+.sessions .span {
+  font-variant-numeric: tabular-nums;
+  font-weight: 600;
+  color: var(--ink-1);
+}
+.sessions .none {
+  font-size: 12px;
   color: var(--ink-3);
 }
 
