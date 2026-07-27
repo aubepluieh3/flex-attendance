@@ -25,7 +25,12 @@ const KIND_LABEL = {
 
 const hours = (minutes: number) => Math.round((minutes / 60) * 100) / 100;
 
-export default async function SettingsPage() {
+export default async function SettingsPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ msg?: string; err?: string }>;
+}) {
+  const { msg, err } = await searchParams;
   const viewer = await requestViewer();
   const rules = await loadOrgRules(viewer.orgId);
   const zone = rules.attendance.timezone;
@@ -105,6 +110,19 @@ export default async function SettingsPage() {
           변경&quot;으로 표시됩니다.
         </span>
       </p>
+
+      {(msg || err) && (
+        <section className="card">
+          <ul className="issues">
+            <li>
+              <span className={`icon ${err ? "crit" : "warn"}`} aria-hidden="true">
+                !
+              </span>
+              <span className="what">{err ?? msg}</span>
+            </li>
+          </ul>
+        </section>
+      )}
 
       {warnings.length > 0 && (
         <section className="card">

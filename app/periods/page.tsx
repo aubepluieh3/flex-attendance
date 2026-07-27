@@ -9,7 +9,12 @@ import { closeDueAction, reopenPeriodAction } from "./actions";
 
 export const dynamic = "force-dynamic";
 
-export default async function PeriodsPage() {
+export default async function PeriodsPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ msg?: string; err?: string }>;
+}) {
+  const { msg, err } = await searchParams;
   const viewer = await requestViewer();
   const rules = await loadOrgRules(viewer.orgId);
   const zone = rules.attendance.timezone;
@@ -63,9 +68,26 @@ export default async function PeriodsPage() {
         <span className="dim">
           마감된 기간의 숫자는 스냅샷으로 고정되어 규칙이 바뀌어도 흔들리지
           않습니다. 늦게 온 태그는 계속 받되 &quot;마감 후 변경&quot;으로
-          표시됩니다.
+          표시됩니다. 기준 시각{" "}
+          {DateTime.fromJSDate(asOf, { zone }).toFormat("M월 d일 HH:mm")}
         </span>
       </p>
+
+      {(msg || err) && (
+        <section className="card">
+          <ul className="issues">
+            <li>
+              <span
+                className={`icon ${err ? "crit" : "warn"}`}
+                aria-hidden="true"
+              >
+                !
+              </span>
+              <span className="what">{err ?? msg}</span>
+            </li>
+          </ul>
+        </section>
+      )}
 
       <section className="card">
         <h2>마감 실행</h2>
@@ -84,7 +106,11 @@ export default async function PeriodsPage() {
         </section>
       ) : (
         periods.map((p) => {
-          const closesAt = closeDateFor(p.periodEnd, rules.closeGraceDays, zone);
+          const closesAt = closeDateFor(
+            p.periodEnd,
+            rules.closeGraceDays,
+            zone,
+          );
           return (
             <section className="card" key={p.id}>
               <div className="day-head">
@@ -117,7 +143,7 @@ export default async function PeriodsPage() {
                       type="text"
                       name="reason"
                       required
-                      placeholder="7/22 누락 태그 반영을 위해 다시 엽니다"
+                      placeholder="누락 태그 반영을 위해 다시 엽니다"
                     />
                   </label>
                   <button type="submit" className="pill">
@@ -152,10 +178,6 @@ export default async function PeriodsPage() {
           );
         })
       )}
-
-      <p className="empty" style={{ marginTop: 4 }}>
-        기준 시각 {DateTime.fromJSDate(asOf, { zone }).toFormat("M월 d일 HH:mm")}
-      </p>
     </main>
   );
 }

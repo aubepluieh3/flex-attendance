@@ -1,6 +1,7 @@
 "use server";
 
 import { requestViewer } from "../viewer";
+import { rethrowControlFlow } from "../action-error";
 import { applyImport, type ImportReport } from "@/db/import";
 import type { ColumnMapping } from "@/lib/csv";
 
@@ -50,6 +51,7 @@ export async function importAction(
     });
     return { kind: "done", report };
   } catch (e) {
+    rethrowControlFlow(e);
     return { kind: "error", message: (e as Error).message };
   }
 }

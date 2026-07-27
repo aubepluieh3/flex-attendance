@@ -6,7 +6,7 @@ import { resolvePeriod } from "@/lib/attendance/period";
 import type { ComputedDay, DayFlag } from "@/lib/attendance/types";
 import { now } from "@/lib/clock";
 import { requestViewer } from "../viewer";
-import { adjustAction, revertAction } from "./actions";
+import { recordsAction } from "./actions";
 import { PeriodNav } from "../period-nav";
 
 export const dynamic = "force-dynamic";
@@ -40,9 +40,9 @@ function hm(minutes: number): string {
 export default async function RecordsPage({
   searchParams,
 }: {
-  searchParams: Promise<{ period?: string }>;
+  searchParams: Promise<{ period?: string; msg?: string; err?: string }>;
 }) {
-  const { period } = await searchParams;
+  const { period, msg, err } = await searchParams;
   const viewer = await requestViewer();
   const rules = await loadOrgRules(viewer.orgId);
   const zone = rules.attendance.timezone;
@@ -76,6 +76,7 @@ export default async function RecordsPage({
 
   const time = (d: Date | null) =>
     d ? DateTime.fromJSDate(d, { zone }).toFormat("HH:mm") : "";
+
 
   return (
     <main className="page">
@@ -119,6 +120,19 @@ export default async function RecordsPage({
         </section>
       )}
 
+      {(msg || err) && (
+        <section className="card">
+          <ul className="issues">
+            <li>
+              <span className={`icon ${err ? "crit" : "warn"}`} aria-hidden="true">
+                !
+              </span>
+              <span className="what">{err ?? msg}</span>
+            </li>
+          </ul>
+        </section>
+      )}
+
       {dates.map((date) => {
         const day = byDate.get(date);
         const dt = DateTime.fromISO(date, { zone });
@@ -152,61 +166,49 @@ export default async function RecordsPage({
               ))}
             </div>
 
-            {closed ? null : (
-            <form action={adjustAction} className="adjust">
-              <input type="hidden" name="workDate" value={date} />
-              <label className="field">
-                <span>출근</span>
-                <input
-                  type="time"
-                  name="firstIn"
-                  defaultValue={time(day?.firstInAt ?? null)}
-                />
-              </label>
-              <label className="field">
-                <span>퇴근</span>
-                <input
-                  type="time"
-                  name="lastOut"
-                  defaultValue={time(day?.lastOutAt ?? null)}
-                />
-              </label>
-              <label className="field">
-                <span>외근 시간(분)</span>
-                <input
-                  type="number"
-                  name="addedMinutes"
-                  min={0}
-                  max={1440}
-                  step={10}
-                  placeholder="0"
-                />
-              </label>
-              <label className="field grow">
-                <span>
-                  사유<b> *</b>
-                </span>
-                <input
-                  type="text"
-                  name="reason"
-                  required
-                  placeholder={
-                    needsFix ? "사원증을 놓고 와서 퇴근을 못 찍었습니다" : "정정 사유"
-                  }
-                />
-              </label>
-              <button type="submit">보정</button>
-            </form>
-            )}
+            {!closed && (
+              <>
+                <form action={recordsAction} className="adjust">
+                  <input type="hidden" name="op" value="adjust" />
+                  <input type="hidden" name="workDate" value={date} />
+                  <input type="hidden" name="period" value={range.start} />
+                  <label className="field">
+                    <span>출근</span>
+                    <input type="time" name="firstIn" defaultValue={time(day?.firstInAt ?? null)} />
+                  </label>
+                  <label className="field">
+                    <span>퇴근</span>
+                    <input type="time" name="lastOut" defaultValue={time(day?.lastOutAt ?? null)} />
+                  </label>
+                  <label className="field">
+                    <span>외근 시간(분)</span>
+                    <input type="number" name="addedMinutes" min={0} max={1440} step={10} placeholder="예: 480 = 8시간" />
+                  </label>
+                  <label className="field grow">
+                    <span>
+                      사유<b> *</b>
+                    </span>
+                    <input
+                      type="text"
+                      name="reason"
+                      required
+                      placeholder={needsFix ? "사원증을 놓고 와서 퇴근을 못 찍었습니다" : "정정 사유"}
+                    />
+                  </label>
+                  <button type="submit">보정</button>
+                </form>
 
-            {wasAdjusted && !closed && (
-              <form action={revertAction} className="adjust">
-                <input type="hidden" name="workDate" value={date} />
-                <input type="hidden" name="reason" value="보정 취소" />
-                <button type="submit" className="pill">
-                  보정 취소 (원본으로)
-                </button>
-              </form>
+                {wasAdjusted && (
+                  <form action={recordsAction} className="adjust">
+                    <input type="hidden" name="op" value="revert" />
+                    <input type="hidden" name="workDate" value={date} />
+                    <input type="hidden" name="period" value={range.start} />
+                    <button type="submit" className="pill">
+                      보정 취소 (원본으로)
+                    </button>
+                  </form>
+                )}
+              </>
             )}
           </section>
         );
