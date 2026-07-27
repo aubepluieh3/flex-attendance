@@ -3,12 +3,8 @@ import { computePeriodSummary } from "@/lib/attendance/settle";
 import { resolvePeriod } from "@/lib/attendance/period";
 import type { ComputedDay, DayFlag } from "@/lib/attendance/types";
 import { isDemoClock, now } from "@/lib/clock";
-import {
-  currentViewer,
-  loadOrgRules,
-  loadTimeOff,
-  loadWorkDays,
-} from "@/db/access";
+import { loadOrgRules, loadTimeOff, loadWorkDays } from "@/db/access";
+import { requestViewer } from "./viewer";
 
 // DB를 읽으므로 빌드 시점에 프리렌더하지 않는다
 export const dynamic = "force-dynamic";
@@ -57,7 +53,7 @@ const label = (date: string, zone: string) => {
 };
 
 export default async function Page() {
-  const viewer = await currentViewer();
+  const viewer = await requestViewer();
   const rules = await loadOrgRules(viewer.orgId);
   const zone = rules.attendance.timezone;
 
@@ -128,9 +124,12 @@ export default async function Page() {
   const core = rules.attendance.coreTime;
   const from = DateTime.fromISO(range.start, { zone });
   const to = DateTime.fromISO(range.end, { zone });
-  const importedThrough = DateTime.fromJSDate(asOf, { zone })
-    .minus({ days: 1 })
-    .toFormat("M월 d일");
+  // 실제 데이터에서 뽑는다. "기준시각 - 1일"로 두면 임포트가 늦거나 빠를 때
+  // 화면이 거짓말을 한다.
+  const lastRecorded = days.filter((d) => d.tagCount > 0).at(-1)?.workDate;
+  const importedThrough = lastRecorded
+    ? `근태 기록은 ${DateTime.fromISO(lastRecorded, { zone }).toFormat("M월 d일")}까지 들어와 있음`
+    : "이 기간에 들어온 근태 기록이 없음";
 
   return (
     <main className="page">
@@ -145,8 +144,8 @@ export default async function Page() {
         {rules.settlementKind === "week" ? "주" : "월"} 단위 정산
         <br />
         <span className="dim">
-          {DateTime.fromJSDate(asOf, { zone }).toFormat("M월 d일 HH:mm")} 기준 ·
-          근태 기록은 {importedThrough}까지 반영됨
+          {DateTime.fromJSDate(asOf, { zone }).toFormat("M월 d일 HH:mm")} 기준 ·{" "}
+          {importedThrough}
         </span>
       </p>
 

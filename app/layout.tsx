@@ -1,5 +1,7 @@
 import type { Metadata } from "next";
+import Link from "next/link";
 import "./globals.css";
+import { UserSwitcher } from "./user-switcher";
 
 export const metadata: Metadata = {
   title: "내 근무시간 — flex-attendance",
@@ -13,7 +15,16 @@ export default function RootLayout({
 }) {
   return (
     <html lang="ko">
-      <body>{children}</body>
+      <body>
+        <nav className="topbar">
+          <div className="topbar-inner">
+            <Link href="/">내 근무시간</Link>
+            <Link href="/import">근태 파일 반영</Link>
+            <UserSwitcher />
+          </div>
+        </nav>
+        {children}
+      </body>
     </html>
   );
 }

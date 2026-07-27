@@ -64,7 +64,62 @@ body {
 .page {
   max-width: 860px;
   margin: 0 auto;
-  padding: 32px 20px 64px;
+  padding: 24px 20px 64px;
+}
+
+/* ── 상단 바 ── */
+.topbar {
+  border-bottom: 1px solid var(--border);
+  background: var(--surface);
+}
+.topbar-inner {
+  max-width: 860px;
+  margin: 0 auto;
+  padding: 10px 20px;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px 16px;
+  font-size: 13.5px;
+}
+.topbar a {
+  color: var(--ink-2);
+  text-decoration: none;
+  font-weight: 600;
+}
+.topbar a:hover {
+  color: var(--ink);
+}
+
+/* 데모 계정 선택 — 인증 대신 쓰는 임시 장치라 로그인처럼 보이지 않게 둔다 */
+.switcher {
+  margin-left: auto;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 5px;
+}
+.switcher-label {
+  font-size: 11px;
+  color: var(--muted);
+  margin-right: 2px;
+}
+.switcher form {
+  display: contents;
+}
+button.pill {
+  font-size: 12px;
+  font-weight: 600;
+  padding: 3px 9px;
+  border-radius: 999px;
+  border: 1px solid var(--border);
+  background: transparent;
+  color: var(--ink-2);
+}
+button.pill.on {
+  background: var(--series);
+  border-color: transparent;
+  color: #fff;
 }
 
 /* ── 헤더 ── */
@@ -373,4 +428,67 @@ td.none {
   border-radius: 999px;
   border: 1px solid var(--border);
   color: var(--ink-2);
+}
+
+/* ── 폼 (임포트 화면) ── */
+a {
+  color: var(--series);
+}
+
+input[type="file"] {
+  font: inherit;
+  font-size: 14px;
+  color: var(--ink-2);
+  max-width: 100%;
+}
+
+.fields {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  gap: 12px;
+}
+.field {
+  display: grid;
+  gap: 5px;
+  font-size: 12px;
+  color: var(--muted);
+}
+.field b {
+  color: var(--critical);
+}
+.field select {
+  font: inherit;
+  font-size: 14px;
+  color: var(--ink);
+  background: var(--surface);
+  border: 1px solid var(--axis);
+  border-radius: 8px;
+  padding: 7px 9px;
+  width: 100%;
+}
+
+.check {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 13px;
+  color: var(--ink-2);
+  margin-top: 14px;
+}
+
+button {
+  font: inherit;
+  font-weight: 620;
+  font-size: 14px;
+  color: #fff;
+  background: var(--series);
+  border: none;
+  border-radius: 9px;
+  padding: 10px 18px;
+  cursor: pointer;
+}
+button:disabled {
+  background: var(--grid);
+  color: var(--muted);
+  cursor: not-allowed;
 }

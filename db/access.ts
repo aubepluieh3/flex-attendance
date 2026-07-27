@@ -36,12 +36,8 @@ export class AccessDenied extends Error {
   }
 }
 
-/**
- * 로그인이 붙기 전까지 쓰는 임시 조회.
- * DEMO_USER(사번)가 있으면 그 사람, 없으면 첫 member.
- */
-export async function currentViewer(): Promise<Viewer> {
-  const rows = await db
+export async function listUsers(): Promise<(Viewer & { employeeNo: string })[]> {
+  return db
     .select({
       id: users.id,
       orgId: users.orgId,
@@ -54,12 +50,22 @@ export async function currentViewer(): Promise<Viewer> {
     .from(users)
     .leftJoin(teams, eq(users.teamId, teams.id))
     .orderBy(asc(users.employeeNo));
+}
 
+/**
+ * 로그인이 붙기 전까지 쓰는 임시 조회.
+ * 인자로 사번을 받고, 없으면 DEMO_USER, 그것도 없으면 첫 member.
+ *
+ * 쿠키 읽기는 app 레이어(app/viewer.ts)에 둔다 — 여기서 next/headers를 쓰면
+ * 요청 밖에서 도는 스크립트(db/access.check.ts)가 깨진다.
+ */
+export async function currentViewer(employeeNo?: string): Promise<Viewer> {
+  const rows = await listUsers();
   if (rows.length === 0) {
     throw new Error("사용자가 없습니다. npm run db:seed 를 먼저 실행하세요.");
   }
 
-  const wanted = process.env.DEMO_USER;
+  const wanted = employeeNo ?? process.env.DEMO_USER;
   const found = wanted
     ? rows.find((r) => r.employeeNo === wanted)
     : rows.find((r) => r.role === "member");
