@@ -5,6 +5,7 @@ build/
 out/
 .DS_Store
 *.log
+*.tsbuildinfo
 .env
 .env.*
 data/*.db
