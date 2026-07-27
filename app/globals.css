@@ -578,3 +578,28 @@ button:disabled {
   font-size: 12px;
   color: var(--muted);
 }
+
+.secret {
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 22px;
+  font-weight: 640;
+  letter-spacing: 0.04em;
+  padding: 14px 18px;
+  border: 1px dashed var(--axis);
+  border-radius: 10px;
+  background: var(--plane);
+  user-select: all;
+}
+form.inline { display: inline; }
+form.inline select {
+  font: inherit;
+  font-size: 13px;
+  color: var(--ink);
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 7px;
+  padding: 3px 6px;
+}
+.row-actions { display: flex; gap: 6px; justify-content: flex-end; }
+a.whoami { text-decoration: none; }
+a.whoami:hover { color: var(--ink); }

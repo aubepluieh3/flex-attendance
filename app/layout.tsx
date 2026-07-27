@@ -29,6 +29,7 @@ const MENU = [
   { href: "/import", label: "근태 파일 반영", roles: ["hr"] },
   { href: "/periods", label: "정산기간", roles: ["hr"] },
   { href: "/settings", label: "설정", roles: ["hr"] },
+  { href: "/people", label: "사용자", roles: ["hr"] },
 ] as const;
 
 export default async function RootLayout({
@@ -56,9 +57,9 @@ export default async function RootLayout({
                 알림
                 {unread > 0 && <span className="badge"> {unread} </span>}
               </Link>
-              <span className="whoami">
+              <Link href="/account" className="whoami">
                 {viewer.name} · {ROLE_LABEL[viewer.role]}
-              </span>
+              </Link>
               <form action={logoutAction}>
                 <button type="submit" className="pill">
                   로그아웃
