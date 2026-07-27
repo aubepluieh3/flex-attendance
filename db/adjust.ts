@@ -2,7 +2,13 @@ import { and, asc, desc, eq, gte, lte } from "drizzle-orm";
 import { DateTime } from "luxon";
 import { db } from "./client";
 import { dayAdjustments, users } from "./schema";
-import { AccessDenied, loadOrgRules, type OrgRules, type Viewer } from "./access";
+import {
+  AccessDenied,
+  assertCanReadDetail,
+  loadOrgRules,
+  type OrgRules,
+  type Viewer,
+} from "./access";
 import { isPeriodClosed } from "./close";
 import { recomputeWorkDays } from "./recompute";
 import { resolvePeriod, type PeriodRange } from "@/lib/attendance/period";
@@ -167,9 +173,9 @@ export async function listAdjustments(
   targetUserId: string,
   range: PeriodRange,
 ): Promise<AdjustmentRow[]> {
-  if (viewer.id !== targetUserId && viewer.role !== "hr") {
-    await assertCanEdit(viewer, targetUserId);
-  }
+  // 읽기이므로 조회 권한을 쓴다. 여기에 쓰기 권한(assertCanEdit)을 걸면
+  // 팀장이 팀원 보정 이력을 못 봐서 검토 화면 자체가 성립하지 않는다.
+  await assertCanReadDetail(viewer, targetUserId);
 
   return db
     .select({

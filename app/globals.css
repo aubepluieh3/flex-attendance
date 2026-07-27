@@ -544,3 +544,20 @@ button:disabled {
 .adjust + .adjust {
   margin-top: 10px;
 }
+
+/* 확인 필요 건수 배지 — 팀장이 매일 열 이유를 만든다 */
+.badge {
+  display: inline-block;
+  min-width: 20px;
+  text-align: center;
+  font-size: 12px;
+  font-weight: 700;
+  padding: 1px 7px;
+  border-radius: 999px;
+  background: var(--warning);
+  color: #1a1a19;
+}
+.badge.crit {
+  background: var(--critical);
+  color: #fff;
+}
