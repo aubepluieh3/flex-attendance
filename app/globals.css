@@ -217,6 +217,9 @@ button.pill.on {
 .status.good {
   color: var(--good-ink);
 }
+.status.crit {
+  color: var(--critical);
+}
 
 /* ── 통계 타일 ── */
 .tiles {
@@ -491,4 +494,53 @@ button:disabled {
   background: var(--grid);
   color: var(--muted);
   cursor: not-allowed;
+}
+
+.field input[type="time"],
+.field input[type="number"],
+.field input[type="text"] {
+  font: inherit;
+  font-size: 14px;
+  color: var(--ink);
+  background: var(--surface);
+  border: 1px solid var(--axis);
+  border-radius: 8px;
+  padding: 7px 9px;
+  width: 100%;
+}
+
+/* ── 보정 화면 ── */
+.day-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 14px;
+}
+.day-sum {
+  font-size: 13.5px;
+  color: var(--ink-2);
+  font-variant-numeric: tabular-nums;
+}
+.day-sum.none {
+  color: var(--muted);
+}
+
+.adjust {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  gap: 10px;
+}
+.adjust .field {
+  flex: 0 0 116px;
+}
+.adjust .field.grow {
+  flex: 1 1 200px;
+}
+.adjust button {
+  padding: 9px 16px;
+}
+.adjust + .adjust {
+  margin-top: 10px;
 }

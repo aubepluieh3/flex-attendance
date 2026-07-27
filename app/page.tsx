@@ -4,6 +4,7 @@ import { resolvePeriod } from "@/lib/attendance/period";
 import type { ComputedDay, DayFlag } from "@/lib/attendance/types";
 import { isDemoClock, now } from "@/lib/clock";
 import { loadOrgRules, loadTimeOff, loadWorkDays } from "@/db/access";
+import Link from "next/link";
 import { requestViewer } from "./viewer";
 
 // DB를 읽으므로 빌드 시점에 프리렌더하지 않는다
@@ -114,12 +115,20 @@ export default async function Page() {
     summary.remainingMinutes > 0 &&
     requiredPerDay > dailyLimit;
 
+  const nextDow = remainingBusinessDates[0]
+    ? label(remainingBusinessDates[0], zone).dow
+    : null;
+
+  // 달성이 불가능하면 "하루 40시간 필요" 같은 숫자를 보여주지 않는다.
+  // 물리적으로 불가능한 값을 요구하는 화면은 사용자를 조롱하는 것에 가깝다.
   const remainingLabel =
     summary.remainingBusinessDays === 0
-      ? "영업일이 모두 지났습니다"
-      : summary.remainingBusinessDays === 1
-        ? `${label(remainingBusinessDates[0], zone).dow}요일 하루 남음 — 하루 ${hm(requiredPerDay)} 필요`
-        : `영업일 ${summary.remainingBusinessDays}일 남음 — 하루 ${hm(requiredPerDay)} 필요`;
+      ? "영업일이 모두 지났습니다 — 이번 정산기간에는 더 채울 수 없습니다"
+      : unreachable
+        ? `영업일 ${summary.remainingBusinessDays}일 남음 — 1일 상한(${hm(dailyLimit!)})으로는 채울 수 없습니다`
+        : summary.remainingBusinessDays === 1 && nextDow
+          ? `${nextDow}요일 하루 남음 — 하루 ${hm(requiredPerDay)} 필요`
+          : `영업일 ${summary.remainingBusinessDays}일 남음 — 하루 ${hm(requiredPerDay)} 필요`;
 
   const core = rules.attendance.coreTime;
   const from = DateTime.fromISO(range.start, { zone });
@@ -149,9 +158,27 @@ export default async function Page() {
         </span>
       </p>
 
-      {/* 남은 시간 — 실제로 존재하는 숫자를 1급으로 둔다 */}
+      {/*
+        히어로 우선순위: 법정 위반 > 목표 달성 > 남은 시간.
+        52시간 초과는 위법 소지인데 "목표 달성" 축하 화면에 묻히면 안 된다.
+        실제로 존재하는 숫자만 1급으로 둔다 (예측값은 아래 타일로).
+      */}
       <section className="card hero">
-        {summary.remainingMinutes === 0 ? (
+        {summary.exceedsAvgWeeklyLimit ? (
+          <>
+            <div className="label">주 평균 근로시간</div>
+            <div className="figure">{hm(summary.avgWeeklyMinutes)}</div>
+            <div className="status crit">
+              <span className="dot" aria-hidden="true" />
+              법정 한도 52시간 초과
+            </div>
+            <div className="note">
+              누적 {hm(summary.workedMinutes)} · 법정 초과{" "}
+              {hm(summary.overtimeMinutes)}. 남은 기간 근무를 줄이고 팀장과
+              조정하세요.
+            </div>
+          </>
+        ) : summary.remainingMinutes === 0 ? (
           <>
             <div className="label">이번 정산기간 소정근로</div>
             <div className="figure">채웠습니다</div>
@@ -171,7 +198,7 @@ export default async function Page() {
             {unreachable && (
               <div className="status warn">
                 <span className="dot" aria-hidden="true" />
-                1일 상한 {hm(dailyLimit!)}을 넘습니다
+                남은 영업일로는 채울 수 없습니다
               </div>
             )}
             <div className="note">{remainingLabel}</div>
@@ -189,12 +216,24 @@ export default async function Page() {
             <div className="k">소정근로</div>
             <div className="v">{hm(summary.targetMinutes)}</div>
           </div>
+          {/* 목표를 채웠으면 페이스는 의미가 없다. 두 메시지가 모순되면 안 된다. */}
           <div className="tile">
             <div className="k">이 페이스면</div>
-            <div className="v">{hm(summary.projectedMinutes)}</div>
-            <div className="k" style={{ marginTop: 2 }}>
-              {paceNote}
-            </div>
+            {summary.remainingMinutes === 0 ? (
+              <>
+                <div className="v">—</div>
+                <div className="k" style={{ marginTop: 2 }}>
+                  목표를 이미 채웠음
+                </div>
+              </>
+            ) : (
+              <>
+                <div className="v">{hm(summary.projectedMinutes)}</div>
+                <div className="k" style={{ marginTop: 2 }}>
+                  {paceNote}
+                </div>
+              </>
+            )}
           </div>
           <div className="tile">
             <div className="k">야간 근무</div>
@@ -260,7 +299,7 @@ export default async function Page() {
                     <br />
                     <span className="why">
                       {clock(d?.firstInAt ?? null, zone)} 출근 기록만 있습니다.
-                      집계에서 빠져 있으니 퇴근 시각을 보정해 주세요.
+                      집계에서 빠져 있습니다. <Link href="/records">보정하기</Link>
                     </span>
                   </span>
                 </li>

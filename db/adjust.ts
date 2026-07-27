@@ -1,0 +1,175 @@
+import { and, asc, desc, eq, gte, lte } from "drizzle-orm";
+import { DateTime } from "luxon";
+import { db } from "./client";
+import { dayAdjustments, users } from "./schema";
+import { AccessDenied, loadOrgRules, type Viewer } from "./access";
+import { recomputeWorkDays } from "./recompute";
+import type { PeriodRange } from "@/lib/attendance/period";
+
+/**
+ * 예외 보정 입력.
+ *
+ * 화면이 "퇴근 시각을 보정해 주세요"라고 지시하면 그걸 할 수 있어야 한다.
+ * append-only로 쌓고 (userId, workDate)별 가장 최근 1건만 적용한다.
+ */
+
+export type AdjustInput = {
+  workDate: string;
+  /** "HH:MM" — 비우면 기존 값을 그대로 쓴다 */
+  firstIn?: string;
+  lastOut?: string;
+  /** 외근·출장처럼 시각을 모르고 시간만 더하는 경우 (실근무 분) */
+  addedMinutes?: number;
+  reason: string;
+};
+
+/**
+ * 기록 수정은 본인과 HR만. 팀장은 조회까지만 한다 —
+ * 남의 근태 시간을 고칠 수 있으면 열람 로그로도 감사가 안 된다.
+ */
+async function assertCanEdit(viewer: Viewer, targetUserId: string) {
+  if (viewer.id === targetUserId) return;
+  if (viewer.role === "hr") return;
+  throw new AccessDenied("본인 기록만 보정할 수 있습니다.");
+}
+
+function combine(
+  workDate: string,
+  hhmm: string | undefined,
+  zone: string,
+): Date | null {
+  if (!hhmm) return null;
+  const dt = DateTime.fromISO(`${workDate}T${hhmm}`, { zone });
+  return dt.isValid ? dt.toJSDate() : null;
+}
+
+export async function createAdjustment(
+  viewer: Viewer,
+  targetUserId: string,
+  input: AdjustInput,
+): Promise<void> {
+  await assertCanEdit(viewer, targetUserId);
+
+  const reason = input.reason.trim();
+  if (!reason) throw new Error("사유를 적어 주세요. 근태 보정은 감사 대상입니다.");
+
+  const rules = await loadOrgRules(viewer.orgId);
+  const zone = rules.attendance.timezone;
+
+  let firstInAt = combine(input.workDate, input.firstIn, zone);
+  let lastOutAt = combine(input.workDate, input.lastOut, zone);
+  const addedMinutes = Math.max(0, Math.round(input.addedMinutes ?? 0));
+
+  if (!firstInAt && !lastOutAt && addedMinutes === 0) {
+    throw new Error("출근·퇴근 시각이나 추가 근무시간 중 하나는 넣어야 합니다.");
+  }
+
+  // 퇴근이 출근보다 이르면 자정을 넘긴 것으로 본다.
+  // time 입력만으로는 날짜를 알 수 없어서 이 규칙이 필요하다.
+  if (firstInAt && lastOutAt && lastOutAt <= firstInAt) {
+    lastOutAt = DateTime.fromJSDate(lastOutAt, { zone })
+      .plus({ days: 1 })
+      .toJSDate();
+  }
+
+  const kind =
+    firstInAt || lastOutAt
+      ? "missing_tag"
+      : addedMinutes > 0
+        ? "field_work"
+        : "correction";
+
+  await db.insert(dayAdjustments).values({
+    orgId: viewer.orgId,
+    userId: targetUserId,
+    workDate: input.workDate,
+    kind,
+    overrideFirstInAt: firstInAt,
+    overrideLastOutAt: lastOutAt,
+    addedMinutes,
+    reason,
+    createdBy: viewer.id,
+  });
+
+  await recomputeWorkDays({
+    orgId: viewer.orgId,
+    userId: targetUserId,
+    from: input.workDate,
+    to: input.workDate,
+    rules: rules.attendance,
+  });
+}
+
+/** 보정 취소도 삭제가 아니라 새 행이다 */
+export async function revertAdjustment(
+  viewer: Viewer,
+  targetUserId: string,
+  workDate: string,
+  reason: string,
+): Promise<void> {
+  await assertCanEdit(viewer, targetUserId);
+
+  const rules = await loadOrgRules(viewer.orgId);
+  await db.insert(dayAdjustments).values({
+    orgId: viewer.orgId,
+    userId: targetUserId,
+    workDate,
+    kind: "revert",
+    addedMinutes: 0,
+    reason: reason.trim() || "보정 취소",
+    createdBy: viewer.id,
+  });
+
+  await recomputeWorkDays({
+    orgId: viewer.orgId,
+    userId: targetUserId,
+    from: workDate,
+    to: workDate,
+    rules: rules.attendance,
+  });
+}
+
+export type AdjustmentRow = {
+  id: string;
+  workDate: string;
+  kind: "field_work" | "missing_tag" | "correction" | "revert";
+  overrideFirstInAt: Date | null;
+  overrideLastOutAt: Date | null;
+  addedMinutes: number;
+  reason: string;
+  createdAt: Date;
+  createdByName: string;
+};
+
+export async function listAdjustments(
+  viewer: Viewer,
+  targetUserId: string,
+  range: PeriodRange,
+): Promise<AdjustmentRow[]> {
+  if (viewer.id !== targetUserId && viewer.role !== "hr") {
+    await assertCanEdit(viewer, targetUserId);
+  }
+
+  return db
+    .select({
+      id: dayAdjustments.id,
+      workDate: dayAdjustments.workDate,
+      kind: dayAdjustments.kind,
+      overrideFirstInAt: dayAdjustments.overrideFirstInAt,
+      overrideLastOutAt: dayAdjustments.overrideLastOutAt,
+      addedMinutes: dayAdjustments.addedMinutes,
+      reason: dayAdjustments.reason,
+      createdAt: dayAdjustments.createdAt,
+      createdByName: users.name,
+    })
+    .from(dayAdjustments)
+    .innerJoin(users, eq(dayAdjustments.createdBy, users.id))
+    .where(
+      and(
+        eq(dayAdjustments.userId, targetUserId),
+        gte(dayAdjustments.workDate, range.start),
+        lte(dayAdjustments.workDate, range.end),
+      ),
+    )
+    .orderBy(desc(dayAdjustments.createdAt));
+}

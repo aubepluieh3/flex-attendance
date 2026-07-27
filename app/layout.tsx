@@ -19,6 +19,7 @@ export default function RootLayout({
         <nav className="topbar">
           <div className="topbar-inner">
             <Link href="/">내 근무시간</Link>
+            <Link href="/records">내 기록 · 보정</Link>
             <Link href="/import">근태 파일 반영</Link>
             <UserSwitcher />
           </div>
