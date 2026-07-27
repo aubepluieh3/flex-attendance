@@ -11,6 +11,7 @@ import {
 } from "./access";
 import { isPeriodClosed } from "./close";
 import { recomputeWorkDays } from "./recompute";
+import { syncNotifications } from "./notify";
 import { resolvePeriod, type PeriodRange } from "@/lib/attendance/period";
 
 /**
@@ -123,6 +124,9 @@ export async function createAdjustment(
     to: input.workDate,
     rules: rules.attendance,
   });
+
+  // 보정으로 해소된 알림을 지운다
+  await syncNotifications(viewer.orgId);
 }
 
 /** 보정 취소도 삭제가 아니라 새 행이다 */
@@ -154,6 +158,8 @@ export async function revertAdjustment(
     to: workDate,
     rules: rules.attendance,
   });
+
+  await syncNotifications(viewer.orgId);
 }
 
 export type AdjustmentRow = {

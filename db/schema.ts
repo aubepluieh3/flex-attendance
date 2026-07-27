@@ -67,6 +67,14 @@ export const periodCloseAction = pgEnum("period_close_action", [
   "close",
   "reopen",
 ]);
+export const notificationKind = pgEnum("notification_kind", [
+  "incomplete_day",   // 퇴근 기록 없는 날
+  "rule_violation",   // 코어타임 미준수 등
+  "legal_limit",      // 주 평균 52시간 초과
+  "period_closing",   // 마감 임박 · 아직 목표 미달
+  "post_close_change",// 마감 후 값이 바뀜
+  "team_review",      // 팀장: 팀에 확인 필요
+]);
 export const accessScope = pgEnum("access_scope", [
   "self",
   "user",
@@ -494,6 +502,44 @@ export const periodSnapshots = pgTable(
       t.userId,
       t.capturedAt,
     ),
+  ],
+);
+
+/**
+ * 알림.
+ *
+ * append-only 가 아니다 — 알림은 감사 기록이 아니라 "할 일" 목록이므로,
+ * 조건이 해소되면(미완료를 보정하면) 지운다. 남겨두면 목록이 쓰레기가 된다.
+ *
+ * dedupeKey 로 중복을 막는다. 임포트마다 같은 알림이 쌓이면 아무도 안 본다.
+ * 전달 채널(이메일·슬랙)은 아직 없다. 지금은 인앱 알림함뿐이다.
+ */
+export const notifications = pgTable(
+  "notifications",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    orgId: uuid("org_id")
+      .notNull()
+      .references(() => orgs.id),
+    userId: uuid("user_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    kind: notificationKind("kind").notNull(),
+    /** 같은 사유가 두 번 생기지 않게 하는 키 (kind + 대상 날짜/기간) */
+    dedupeKey: text("dedupe_key").notNull(),
+    title: text("title").notNull(),
+    body: text("body").notNull(),
+    /** 눌렀을 때 갈 곳 */
+    href: text("href").notNull(),
+    periodStart: date("period_start", { mode: "string" }),
+    readAt: timestamp("read_at", { withTimezone: true }),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+  },
+  (t) => [
+    uniqueIndex("notifications_dedupe").on(t.userId, t.dedupeKey),
+    index("notifications_user_unread").on(t.userId, t.readAt),
   ],
 );
 

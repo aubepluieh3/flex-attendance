@@ -1,0 +1,341 @@
+import { and, asc, desc, eq, inArray, isNull, sql } from "drizzle-orm";
+import { DateTime } from "luxon";
+import { db } from "./client";
+import { notifications, teams, users } from "./schema";
+import { loadOrgRules, type OrgRules, type Viewer } from "./access";
+import { isPeriodClosed, loadPeriodState } from "./close";
+import { loadTeamRows } from "./team";
+import {
+  resolvePeriod,
+  shiftPeriod,
+  type PeriodRange,
+} from "@/lib/attendance/period";
+import { computePeriodSummary, isClosable } from "@/lib/attendance/settle";
+import { now } from "@/lib/clock";
+
+/**
+ * 알림 동기화.
+ *
+ * 실시간 알림은 원리적으로 불가능하다 — 근태가 CSV 임포트로 들어오므로 "지금
+ * 근무 중" 같은 상태를 앱이 모른다. 대신 임포트·보정·마감 같은 쓰기 이벤트
+ * 뒤에 "지금 확인해야 할 것"을 다시 계산해서 알림함을 맞춘다.
+ *
+ * 조건이 해소되면 알림을 지운다. 알림은 감사 기록이 아니라 할 일 목록이다.
+ */
+
+type Draft = {
+  userId: string;
+  kind:
+    | "incomplete_day"
+    | "rule_violation"
+    | "legal_limit"
+    | "period_closing"
+    | "post_close_change"
+    | "team_review";
+  dedupeKey: string;
+  title: string;
+  body: string;
+  href: string;
+  periodStart: string;
+};
+
+const md = (date: string, zone: string) =>
+  DateTime.fromISO(date, { zone }).toFormat("M월 d일");
+
+const hm = (minutes: number) => {
+  const abs = Math.abs(Math.round(minutes));
+  const h = Math.floor(abs / 60);
+  const m = abs % 60;
+  if (h === 0) return `${m}분`;
+  if (m === 0) return `${h}시간`;
+  return `${h}시간 ${m}분`;
+};
+
+/** 한 사람의 현재 상태에서 필요한 알림을 뽑는다 */
+async function draftsForMember(
+  member: { userId: string; role: string; summary: ReturnType<typeof computePeriodSummary> },
+  range: PeriodRange,
+  rules: OrgRules,
+  asOf: Date,
+  orgId: string,
+): Promise<Draft[]> {
+  const zone = rules.attendance.timezone;
+  const out: Draft[] = [];
+  const s = member.summary;
+  const base = { userId: member.userId, periodStart: range.start };
+
+  for (const date of s.incompleteDates) {
+    out.push({
+      ...base,
+      kind: "incomplete_day",
+      dedupeKey: `incomplete:${date}`,
+      title: `${md(date, zone)} 퇴근 기록이 없습니다`,
+      body: "출근 기록만 있어 집계에서 빠져 있습니다. 퇴근 시각을 보정해 주세요.",
+      href: "/records",
+    });
+  }
+
+  if (s.flaggedDates.length > 0) {
+    const dates = s.flaggedDates.map((f) => md(f.date, zone)).join(", ");
+    out.push({
+      ...base,
+      kind: "rule_violation",
+      dedupeKey: `violation:${range.start}:${s.flaggedDates.map((f) => f.date).join(",")}`,
+      title: `규정 확인이 필요한 날이 ${s.flaggedDates.length}일 있습니다`,
+      body: `${dates}. 의무근로시간대나 1일 상한을 확인해 주세요.`,
+      href: "/records",
+    });
+  }
+
+  if (s.exceedsAvgWeeklyLimit) {
+    out.push({
+      ...base,
+      kind: "legal_limit",
+      dedupeKey: `legal:${range.start}`,
+      title: `주 평균 ${hm(s.avgWeeklyMinutes)} — 법정 한도 초과`,
+      body: "남은 기간 근무를 줄이고 팀장과 조정하세요.",
+      href: "/",
+    });
+  }
+
+  // 정산기간이 끝났고 아직 마감 전인데 목표를 못 채웠으면 알린다.
+  // 마감되면 더 못 고치므로 이 구간이 마지막 기회다.
+  const periodEnded =
+    DateTime.fromJSDate(asOf, { zone }).toISODate()! > range.end;
+  const notYetClosed = !isClosable(
+    range.end,
+    rules.closeGraceDays,
+    asOf,
+    zone,
+  );
+  if (periodEnded && notYetClosed && s.remainingMinutes > 0) {
+    out.push({
+      ...base,
+      kind: "period_closing",
+      dedupeKey: `closing:${range.start}`,
+      title: `${md(range.start, zone)}~${md(range.end, zone)} 정산이 곧 마감됩니다`,
+      body: `소정근로까지 ${hm(s.remainingMinutes)} 부족합니다. 빠진 기록이 있으면 지금 보정해 주세요.`,
+      href: "/records",
+    });
+  }
+
+  const state = await loadPeriodState(orgId, member.userId, range, s);
+  if (state.diff?.changed) {
+    out.push({
+      ...base,
+      kind: "post_close_change",
+      dedupeKey: `postclose:${range.start}`,
+      title: "마감 후 근무 기록이 바뀌었습니다",
+      body: "공식 기록은 마감 시점 값입니다. 반영이 필요하면 HR에 재마감을 요청하세요.",
+      href: "/",
+    });
+  }
+
+  return out;
+}
+
+/**
+ * 조직 전체 알림을 현재 상태에 맞춘다.
+ * 쓰기 이벤트 뒤에 부르거나 배치(npm run db:notify)로 돌린다.
+ */
+export async function syncNotifications(
+  orgId: string,
+  asOf: Date = now(),
+): Promise<{ created: number; resolved: number }> {
+  const rules = await loadOrgRules(orgId);
+  const zone = rules.attendance.timezone;
+  const opts = {
+    kind: rules.settlementKind,
+    weekStartDay: rules.weekStartDay,
+    timezone: zone,
+  };
+  const current = resolvePeriod(
+    DateTime.fromJSDate(asOf, { zone }).toISODate()!,
+    opts,
+  );
+
+  /**
+   * 현재 기간만 보면 안 된다.
+   *
+   * 기간이 끝나도 유예일 동안은 아직 고칠 수 있고, 마감 임박 알림은 애초에
+   * "지난 기간"에 대한 것이다. 현재 기간만 동기화하면 새 기간이 시작되는 순간
+   * 지난 기간 알림이 전부 "해소"로 지워지고, 마감 임박 알림은 생성될 수도 없다.
+   *
+   * 아직 마감되지 않은 과거 기간까지 함께 본다 (최대 6기간으로 제한).
+   */
+  const ranges: PeriodRange[] = [current];
+  for (let back = 1; back <= 6; back += 1) {
+    const past = shiftPeriod(current, -back, opts);
+    const closed = await isPeriodClosed(orgId, past);
+    if (closed) {
+      // 마감된 기간은 "마감 후 변경"만 볼 값이 있으므로 한 칸만 더 본다
+      if (back === 1) ranges.push(past);
+      break;
+    }
+    ranges.push(past);
+  }
+
+  // 시스템 권한으로 전원 요약을 읽는다 (HR 뷰어를 흉내내지 않고 hr 역할로)
+  const [hrUser] = await db
+    .select({
+      id: users.id,
+      orgId: users.orgId,
+      name: users.name,
+      role: users.role,
+      teamId: users.teamId,
+      teamName: teams.name,
+    })
+    .from(users)
+    .leftJoin(teams, eq(users.teamId, teams.id))
+    .where(and(eq(users.orgId, orgId), eq(users.role, "hr")));
+
+  if (!hrUser) return { created: 0, resolved: 0 };
+
+  const drafts: Draft[] = [];
+  for (const range of ranges) {
+    const rows = await loadTeamRows(hrUser as Viewer, range, rules, asOf);
+    for (const r of rows) {
+      drafts.push(
+        ...(await draftsForMember(
+          { userId: r.userId, role: "member", summary: r.summary },
+          range,
+          rules,
+          asOf,
+          orgId,
+        )),
+      );
+    }
+  }
+
+  /**
+   * 팀장에게는 자기 팀 확인 필요를 하나로 묶어 알린다.
+   *
+   * 전사 목록에서 세면 안 된다 — 팀장은 자기 팀만 볼 수 있으므로 열 수도 없는
+   * 사람의 건수를 알리면 안 된다. 팀장별로 자기 범위를 다시 읽는다.
+   */
+  const managerRows = await db
+    .select({
+      id: users.id,
+      orgId: users.orgId,
+      name: users.name,
+      role: users.role,
+      teamId: users.teamId,
+      teamName: teams.name,
+    })
+    .from(users)
+    .leftJoin(teams, eq(users.teamId, teams.id))
+    .where(
+      and(
+        eq(users.orgId, orgId),
+        eq(users.role, "manager"),
+        eq(users.active, true),
+      ),
+    );
+
+  // 개인 알림과 같은 기간 범위를 본다. 팀장만 현재 기간으로 좁히면,
+  // 유예 중인 지난 기간에 팀원 미완료가 있어도 팀장은 모르고 지나간다.
+  for (const m of managerRows) {
+    for (const range of ranges) {
+      const teamRows = await loadTeamRows(m as Viewer, range, rules, asOf);
+      const mine = teamRows.filter(
+        (r) => r.userId !== m.id && r.review.total > 0,
+      );
+      if (mine.length === 0) continue;
+      drafts.push({
+        userId: m.id,
+        kind: "team_review",
+        dedupeKey: `team:${range.start}:${mine.length}`,
+        title: `${md(range.start, zone)}~${md(range.end, zone)} 팀원 ${mine.length}명에게 확인할 항목이 있습니다`,
+        body: mine
+          .slice(0, 3)
+          .map((r) => `${r.name} ${r.review.total}건`)
+          .join(" · "),
+        href: "/team",
+        periodStart: range.start,
+      });
+    }
+  }
+
+  // ── 반영: 없는 건 만들고, 조건이 사라진 건 지운다 ──
+  const existing = await db
+    .select({
+      id: notifications.id,
+      userId: notifications.userId,
+      dedupeKey: notifications.dedupeKey,
+    })
+    .from(notifications)
+    .where(eq(notifications.orgId, orgId));
+
+  const wanted = new Set(drafts.map((d) => `${d.userId}|${d.dedupeKey}`));
+  const stale = existing.filter(
+    (e) => !wanted.has(`${e.userId}|${e.dedupeKey}`),
+  );
+
+  if (stale.length > 0) {
+    await db.delete(notifications).where(
+      inArray(
+        notifications.id,
+        stale.map((s) => s.id),
+      ),
+    );
+  }
+
+  let created = 0;
+  if (drafts.length > 0) {
+    const inserted = await db
+      .insert(notifications)
+      .values(drafts.map((d) => ({ ...d, orgId })))
+      .onConflictDoNothing()
+      .returning({ id: notifications.id });
+    created = inserted.length;
+  }
+
+  return { created, resolved: stale.length };
+}
+
+export type NotificationRow = {
+  id: string;
+  kind: Draft["kind"];
+  title: string;
+  body: string;
+  href: string;
+  readAt: Date | null;
+  createdAt: Date;
+};
+
+export async function listNotifications(
+  viewer: Viewer,
+): Promise<NotificationRow[]> {
+  return db
+    .select({
+      id: notifications.id,
+      kind: notifications.kind,
+      title: notifications.title,
+      body: notifications.body,
+      href: notifications.href,
+      readAt: notifications.readAt,
+      createdAt: notifications.createdAt,
+    })
+    .from(notifications)
+    .where(eq(notifications.userId, viewer.id))
+    .orderBy(asc(notifications.readAt), desc(notifications.createdAt));
+}
+
+export async function unreadCount(viewer: Viewer): Promise<number> {
+  const [row] = await db
+    .select({ n: sql<number>`count(*)::int` })
+    .from(notifications)
+    .where(
+      and(eq(notifications.userId, viewer.id), isNull(notifications.readAt)),
+    );
+  return row?.n ?? 0;
+}
+
+export async function markAllRead(viewer: Viewer): Promise<void> {
+  await db
+    .update(notifications)
+    .set({ readAt: now() })
+    .where(
+      and(eq(notifications.userId, viewer.id), isNull(notifications.readAt)),
+    );
+}

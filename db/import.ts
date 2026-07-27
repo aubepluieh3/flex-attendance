@@ -3,6 +3,7 @@ import { db } from "./client";
 import { attendanceLogs, importBatches, users } from "./schema";
 import { AccessDenied, loadOrgRules, type Viewer } from "./access";
 import { recomputeWorkDays } from "./recompute";
+import { syncNotifications } from "./notify";
 import { mapRows, parseCsv, type ColumnMapping } from "@/lib/csv";
 import { resolveWorkDate } from "@/lib/attendance/compute";
 
@@ -133,6 +134,9 @@ export async function applyImport(opts: {
       days: days.length,
     });
   }
+
+  // 임포트로 미완료·위반이 생겼을 수 있으니 알림을 다시 맞춘다
+  await syncNotifications(viewer.orgId);
 
   return {
     batchId: batch.id,

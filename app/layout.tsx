@@ -3,6 +3,7 @@ import Link from "next/link";
 import "./globals.css";
 import { optionalViewer } from "./viewer";
 import { logoutAction } from "./login/actions";
+import { unreadCount } from "@/db/notify";
 
 export const metadata: Metadata = {
   title: "내 근무시간 — flex-attendance",
@@ -36,6 +37,7 @@ export default async function RootLayout({
   children: React.ReactNode;
 }) {
   const viewer = await optionalViewer();
+  const unread = viewer ? await unreadCount(viewer) : 0;
 
   return (
     <html lang="ko">
@@ -50,6 +52,10 @@ export default async function RootLayout({
                   {m.label}
                 </Link>
               ))}
+              <Link href="/notifications">
+                알림
+                {unread > 0 && <span className="badge"> {unread} </span>}
+              </Link>
               <span className="whoami">
                 {viewer.name} · {ROLE_LABEL[viewer.role]}
               </span>
