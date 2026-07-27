@@ -6,7 +6,7 @@ import { Importer } from "./importer";
 export const dynamic = "force-dynamic";
 
 export default async function ImportPage() {
-  const viewer = await requestViewer();
+  const viewer = await requestViewer("/import");
   const rules = await loadOrgRules(viewer.orgId);
 
   return (

@@ -16,7 +16,17 @@ import { now } from "@/lib/clock";
  */
 
 export const SESSION_COOKIE = "flex_session";
+
+/**
+ * 세션 수명.
+ *
+ * 고정 12시간은 이 앱에 안 맞는다 — 근태는 하루 한두 번 잠깐 열어보는 앱이라
+ * 아침에 로그인하고 저녁에 열면 끊긴다. 쓰는 동안에는 연장되고(슬라이딩),
+ * 안 쓰면 끊기게 한다.
+ */
 const SESSION_HOURS = 12;
+/** 남은 시간이 이보다 적으면 연장한다 (매 요청 UPDATE 를 피하려고 문턱을 둔다) */
+const RENEW_WHEN_UNDER_HOURS = 8;
 
 /**
  * 무차별 대입 제한.
@@ -168,11 +178,23 @@ export async function logout(token: string | undefined): Promise<void> {
   await db.delete(sessions).where(eq(sessions.tokenHash, hashToken(token)));
 }
 
-/** 세션 토큰 → 사용자. 만료·비활성이면 null. */
+/**
+ * 세션 토큰 → 사용자. 만료·비활성이면 null.
+ *
+ * 쓰는 동안에는 만료를 미룬다. 쿠키 만료까지 같이 늘려야 브라우저가 쿠키를
+ * 버리지 않으므로, 갱신했으면 새 만료 시각을 함께 돌려준다.
+ */
 export async function viewerFromToken(
   token: string | undefined,
 ): Promise<Viewer | null> {
+  return (await resolveSession(token))?.viewer ?? null;
+}
+
+export async function resolveSession(
+  token: string | undefined,
+): Promise<{ viewer: Viewer; renewedUntil: Date | null } | null> {
   if (!token) return null;
+  const at = now();
 
   const [row] = await db
     .select({
@@ -183,19 +205,32 @@ export async function viewerFromToken(
       teamId: users.teamId,
       teamName: teams.name,
       active: users.active,
+      sessionId: sessions.id,
+      expiresAt: sessions.expiresAt,
     })
     .from(sessions)
     .innerJoin(users, eq(sessions.userId, users.id))
     .leftJoin(teams, eq(users.teamId, teams.id))
-    .where(
-      and(
-        eq(sessions.tokenHash, hashToken(token)),
-        gt(sessions.expiresAt, now()),
-      ),
-    );
+    .where(and(eq(sessions.tokenHash, hashToken(token)), gt(sessions.expiresAt, at)));
 
   if (!row || !row.active) return null;
-  const { active, ...viewer } = row;
+
+  const { active, sessionId, expiresAt, ...viewer } = row;
   void active;
-  return viewer;
+
+  // 남은 시간이 문턱 아래면 연장한다. 매 요청 UPDATE 하지 않으려고 문턱을 둔다.
+  const hoursLeft = (expiresAt.getTime() - at.getTime()) / 3600000;
+  if (hoursLeft >= RENEW_WHEN_UNDER_HOURS) {
+    return { viewer, renewedUntil: null };
+  }
+
+  const renewedUntil = DateTime.fromJSDate(at)
+    .plus({ hours: SESSION_HOURS })
+    .toJSDate();
+  await db
+    .update(sessions)
+    .set({ expiresAt: renewedUntil })
+    .where(eq(sessions.id, sessionId));
+
+  return { viewer, renewedUntil };
 }

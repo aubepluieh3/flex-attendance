@@ -34,7 +34,10 @@ export async function loginAction(
     expires: result.expiresAt,
   });
 
-  redirect("/");
+  // 원래 가려던 곳으로 돌려보낸다. 열린 리다이렉트를 막으려고 같은 앱 경로만 허용.
+  const raw = String(form.get("next") ?? "");
+  const next = raw.startsWith("/") && !raw.startsWith("//") ? raw : "/";
+  redirect(next);
 }
 
 export async function logoutAction() {

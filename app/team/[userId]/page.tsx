@@ -51,7 +51,7 @@ export default async function TeamMemberPage({
   params: Promise<{ userId: string }>;
 }) {
   const { userId } = await params;
-  const viewer = await requestViewer();
+  const viewer = await requestViewer(`/team/${userId}`);
   const rules = await loadOrgRules(viewer.orgId);
   const zone = rules.attendance.timezone;
 

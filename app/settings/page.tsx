@@ -31,7 +31,7 @@ export default async function SettingsPage({
   searchParams: Promise<{ msg?: string; err?: string }>;
 }) {
   const { msg, err } = await searchParams;
-  const viewer = await requestViewer();
+  const viewer = await requestViewer("/settings");
   const rules = await loadOrgRules(viewer.orgId);
   const zone = rules.attendance.timezone;
 

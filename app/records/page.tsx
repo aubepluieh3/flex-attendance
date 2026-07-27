@@ -43,7 +43,7 @@ export default async function RecordsPage({
   searchParams: Promise<{ period?: string; msg?: string; err?: string }>;
 }) {
   const { period, msg, err } = await searchParams;
-  const viewer = await requestViewer();
+  const viewer = await requestViewer("/records");
   const rules = await loadOrgRules(viewer.orgId);
   const zone = rules.attendance.timezone;
 

@@ -23,7 +23,7 @@ export default async function ReportPage({
   searchParams: Promise<{ period?: string }>;
 }) {
   const { period } = await searchParams;
-  const viewer = await requestViewer();
+  const viewer = await requestViewer("/report");
   const rules = await loadOrgRules(viewer.orgId);
   const zone = rules.attendance.timezone;
   const asOf = now();

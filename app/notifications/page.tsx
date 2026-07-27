@@ -16,7 +16,7 @@ const KIND_TONE: Record<string, "warn" | "crit"> = {
 };
 
 export default async function NotificationsPage() {
-  const viewer = await requestViewer();
+  const viewer = await requestViewer("/notifications");
   const rules = await loadOrgRules(viewer.orgId);
   const zone = rules.attendance.timezone;
   const rows = await listNotifications(viewer);

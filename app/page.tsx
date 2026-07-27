@@ -70,7 +70,7 @@ export default async function Page({
   searchParams: Promise<{ period?: string }>;
 }) {
   const { period } = await searchParams;
-  const viewer = await requestViewer();
+  const viewer = await requestViewer("/");
   const rules = await loadOrgRules(viewer.orgId);
   const zone = rules.attendance.timezone;
 

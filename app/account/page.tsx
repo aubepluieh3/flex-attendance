@@ -11,7 +11,7 @@ const ROLE_LABEL = {
 } as const;
 
 export default async function AccountPage() {
-  const viewer = await requestViewer();
+  const viewer = await requestViewer("/account");
 
   return (
     <main className="page" style={{ maxWidth: 560 }}>

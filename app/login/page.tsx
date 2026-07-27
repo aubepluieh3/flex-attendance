@@ -4,8 +4,22 @@ import { LoginForm } from "./form";
 
 export const dynamic = "force-dynamic";
 
-export default async function LoginPage() {
-  if (await optionalViewer()) redirect("/");
+/** 열린 리다이렉트를 막는다. 같은 앱 안의 경로만 허용한다. */
+function safeNext(next: string | undefined): string | null {
+  if (!next) return null;
+  if (!next.startsWith("/") || next.startsWith("//")) return null;
+  return next;
+}
+
+export default async function LoginPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ reason?: string; next?: string }>;
+}) {
+  const { reason, next } = await searchParams;
+  if (await optionalViewer()) redirect(safeNext(next) ?? "/");
+
+  const target = safeNext(next);
 
   return (
     <main className="auth">
@@ -22,8 +36,32 @@ export default async function LoginPage() {
           <span className="dim">사번과 비밀번호로 로그인합니다.</span>
         </p>
 
+        {/*
+          왜 로그인 화면에 왔는지 말해준다. 설명이 없으면 사용자는 비밀번호가
+          틀렸는지 계정이 잠겼는지 알 수 없고, 앱이 고장 났다고 생각한다.
+        */}
+        {reason === "expired" && (
+          <section className="card" style={{ marginBottom: 12 }}>
+            <ul className="issues">
+              <li>
+                <span className="icon warn" aria-hidden="true">
+                  !
+                </span>
+                <span>
+                  <span className="what">로그인이 만료되었습니다</span>
+                  <br />
+                  <span className="why">
+                    비밀번호가 틀린 것이 아닙니다. 다시 로그인하면
+                    {target ? " 보던 화면으로 돌아갑니다." : " 계속 이용할 수 있습니다."}
+                  </span>
+                </span>
+              </li>
+            </ul>
+          </section>
+        )}
+
         <section className="card">
-          <LoginForm />
+          <LoginForm next={target} />
         </section>
 
         {process.env.NODE_ENV !== "production" && (

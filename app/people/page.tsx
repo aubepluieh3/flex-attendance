@@ -7,7 +7,7 @@ import { PeopleManager } from "./manager";
 export const dynamic = "force-dynamic";
 
 export default async function PeoplePage() {
-  const viewer = await requestViewer();
+  const viewer = await requestViewer("/people");
   const rules = await loadOrgRules(viewer.orgId);
 
   if (viewer.role !== "hr") {

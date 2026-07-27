@@ -26,7 +26,7 @@ export default async function TeamPage({
   searchParams: Promise<{ period?: string }>;
 }) {
   const { period } = await searchParams;
-  const viewer = await requestViewer();
+  const viewer = await requestViewer("/team");
   const rules = await loadOrgRules(viewer.orgId);
   const zone = rules.attendance.timezone;
 

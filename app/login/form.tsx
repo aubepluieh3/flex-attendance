@@ -3,7 +3,7 @@
 import { useActionState } from "react";
 import { loginAction, type LoginState } from "./actions";
 
-export function LoginForm() {
+export function LoginForm({ next }: { next: string | null }) {
   const [state, action, pending] = useActionState<LoginState, FormData>(
     loginAction,
     {},
@@ -11,6 +11,7 @@ export function LoginForm() {
 
   return (
     <form action={action}>
+      {next && <input type="hidden" name="next" value={next} />}
       <div className="fields">
         <label className="field">
           <span>사번</span>
