@@ -2,6 +2,7 @@ import { DateTime } from "luxon";
 import { loadOrgRules, loadWorkDays } from "@/db/access";
 import { listAdjustments } from "@/db/adjust";
 import { isPeriodClosed } from "@/db/close";
+import { estimateFor } from "@/db/baseline";
 import { resolvePeriod } from "@/lib/attendance/period";
 import type { ComputedDay, DayFlag } from "@/lib/attendance/types";
 import { now } from "@/lib/clock";
@@ -76,6 +77,19 @@ export default async function RecordsPage({
 
   const time = (d: Date | null) =>
     d ? DateTime.fromJSDate(d, { zone }).toFormat("HH:mm") : "";
+
+  /**
+   * 미완료인 날은 퇴근 시각을 미리 채워준다.
+   *
+   * 0분으로 두고 직접 적게 하면 정직한 사람만 실제 시간을 적고 아닌 사람은
+   * 부풀린다. 시스템이 먼저 제시하면 정직한 쪽은 확인만 하면 되고, 부풀리려면
+   * 제시값을 벗어나야 해서 그 차이가 검토 대상이 된다.
+   */
+  const estimates = new Map<string, Awaited<ReturnType<typeof estimateFor>>>();
+  for (const d of days) {
+    if (d.status !== "incomplete") continue;
+    estimates.set(d.workDate, await estimateFor(viewer.id, d.workDate, rules));
+  }
 
 
   return (
@@ -166,6 +180,14 @@ export default async function RecordsPage({
               ))}
             </div>
 
+            {!closed && estimates.get(date) && (
+              <p className="empty" style={{ marginBottom: 10 }}>
+                {estimates.get(date)!.source === "history"
+                  ? `평소 근무 패턴(최근 ${estimates.get(date)!.sampleDays}일)으로 퇴근 시각을 채워뒀습니다. 맞으면 사유만 적고 보정하세요.`
+                  : "소정근로 기준으로 퇴근 시각을 채워뒀습니다. 맞으면 사유만 적고 보정하세요."}
+              </p>
+            )}
+
             {!closed && (
               <>
                 <form action={recordsAction} className="adjust">
@@ -177,8 +199,15 @@ export default async function RecordsPage({
                     <input type="time" name="firstIn" defaultValue={time(day?.firstInAt ?? null)} />
                   </label>
                   <label className="field">
-                    <span>퇴근</span>
-                    <input type="time" name="lastOut" defaultValue={time(day?.lastOutAt ?? null)} />
+                    <span>퇴근{estimates.get(date) ? " (추정)" : ""}</span>
+                    <input
+                      type="time"
+                      name="lastOut"
+                      defaultValue={
+                        time(day?.lastOutAt ?? null) ||
+                        time(estimates.get(date)?.lastOutAt ?? null)
+                      }
+                    />
                   </label>
                   <label className="field">
                     <span>외근 시간(분)</span>

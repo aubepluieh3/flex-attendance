@@ -139,8 +139,7 @@ export async function loadTeamRows(
         workDate: dayAdjustments.workDate,
         kind: dayAdjustments.kind,
         addedMinutes: dayAdjustments.addedMinutes,
-        overrideFirstInAt: dayAdjustments.overrideFirstInAt,
-        overrideLastOutAt: dayAdjustments.overrideLastOutAt,
+        deltaMinutes: dayAdjustments.deltaMinutes,
       })
       .from(dayAdjustments)
       .where(
@@ -195,22 +194,25 @@ export async function loadTeamRows(
     const tagCountByDate = new Map(days.map((d) => [d.workDate, d.tagCount]));
     const myAdj = adjRows.filter((a) => a.userId === person.id);
 
-    // 시각을 덮어쓴 보정은 "얼마"를 세기 어려우므로 건당 소정근로 1일로 본다.
-    // 정확한 값보다 "이 사람 보정이 과한가"를 판단하는 게 목적이다.
-    const adjustmentMinutes = myAdj.reduce(
-      (sum, a) =>
-        sum +
-        a.addedMinutes +
-        (a.overrideFirstInAt || a.overrideLastOutAt
-          ? rules.settlement.standardMinutesPerDay
-          : 0),
-      0,
-    );
-    const zeroTagAdjustments = myAdj.filter(
-      (a) => (tagCountByDate.get(a.workDate) ?? 0) === 0,
-    ).length;
+    /**
+     * 보정 횟수나 총합으로 세지 않는다. 그러면 사원증을 두 번 깜빡한 사람이
+     * 아예 안 고친 사람보다 의심받는다 — 정직이 손해가 되는 구조다.
+     * 기대값에서 벗어난 정도(deltaMinutes)만 더한다.
+     */
+    const adjustmentMinutes = myAdj.reduce((sum, a) => sum + a.deltaMinutes, 0);
     const adjustmentOverThreshold =
       adjustmentMinutes > rules.reviewThresholdMinutes;
+
+    /**
+     * 태그 없는 날 보정(외근)은 사실 자체로 올리지 않는다. 고객사 방문이 잦은
+     * 사람이 정직하게 등록할수록 매번 의심받게 된다.
+     * 정산기간 영업일의 절반을 넘길 때만 올린다.
+     */
+    const zeroTagDays = myAdj.filter(
+      (a) => (tagCountByDate.get(a.workDate) ?? 0) === 0,
+    ).length;
+    const zeroTagAdjustments =
+      zeroTagDays > Math.floor(summary.businessDays / 2) ? zeroTagDays : 0;
 
     const review = {
       incomplete: summary.incompleteDates.length,

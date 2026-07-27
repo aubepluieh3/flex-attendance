@@ -365,6 +365,15 @@ export const dayAdjustments = pgTable(
     }),
     /** 시간만 더하는 경우 (외근) */
     addedMinutes: integer("added_minutes").notNull().default(0),
+    /**
+     * 기대값에서 벗어난 분.
+     *
+     * 검토 대상을 보정 횟수나 총합으로 잡으면 사원증을 두 번 깜빡한 사람이
+     * 아예 안 고친 사람보다 의심받는다 — 정직이 손해가 되는 구조다.
+     * 기대값(태그가 있으면 원본 계산값, 없으면 1일 소정근로)에서 벗어난
+     * 정도만 센다. 평범한 8시간 외근은 0이 된다.
+     */
+    deltaMinutes: integer("delta_minutes").notNull().default(0),
 
     reason: text("reason").notNull(),
     createdBy: uuid("created_by")

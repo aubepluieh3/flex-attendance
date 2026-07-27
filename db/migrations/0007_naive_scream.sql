@@ -1,0 +1,1 @@
+ALTER TABLE "day_adjustments" ADD COLUMN "delta_minutes" integer DEFAULT 0 NOT NULL;

@@ -50,6 +50,13 @@
       "when": 1785138304731,
       "tag": "0006_slim_the_executioner",
       "breakpoints": true
+    },
+    {
+      "idx": 7,
+      "version": "7",
+      "when": 1785141089763,
+      "tag": "0007_naive_scream",
+      "breakpoints": true
     }
   ]
 }

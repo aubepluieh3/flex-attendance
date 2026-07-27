@@ -10,6 +10,8 @@ import {
   type Viewer,
 } from "./access";
 import { isPeriodClosed } from "./close";
+import { baselineWorkMinutes } from "./baseline";
+import { deviationMinutes } from "@/lib/attendance/estimate";
 import { recomputeWorkDays } from "./recompute";
 import { syncNotifications } from "./notify";
 import { resolvePeriod, type PeriodRange } from "@/lib/attendance/period";
@@ -90,6 +92,14 @@ export async function createAdjustment(
     throw new Error("출근·퇴근 시각이나 추가 근무시간 중 하나는 넣어야 합니다.");
   }
 
+  // 자기신고에 상한이 없으면 부풀리기에 아무 저항이 없다.
+  const limit = rules.attendance.dailyLimitMinutes;
+  if (limit !== null && addedMinutes > limit) {
+    throw new Error(
+      `외근 시간은 1일 상한(${Math.floor(limit / 60)}시간)을 넘을 수 없습니다.`,
+    );
+  }
+
   // 퇴근이 출근보다 이르면 자정을 넘긴 것으로 본다.
   // time 입력만으로는 날짜를 알 수 없어서 이 규칙이 필요하다.
   if (firstInAt && lastOutAt && lastOutAt <= firstInAt) {
@@ -105,25 +115,48 @@ export async function createAdjustment(
         ? "field_work"
         : "correction";
 
-  await db.insert(dayAdjustments).values({
-    orgId: viewer.orgId,
-    userId: targetUserId,
-    workDate: input.workDate,
-    kind,
-    overrideFirstInAt: firstInAt,
-    overrideLastOutAt: lastOutAt,
-    addedMinutes,
-    reason,
-    createdBy: viewer.id,
-  });
+  // 기대값을 먼저 잡아둔다 (보정을 넣기 전 상태 기준)
+  const baseline = await baselineWorkMinutes(
+    targetUserId,
+    input.workDate,
+    rules,
+  );
 
-  await recomputeWorkDays({
+  const [inserted] = await db
+    .insert(dayAdjustments)
+    .values({
+      orgId: viewer.orgId,
+      userId: targetUserId,
+      workDate: input.workDate,
+      kind,
+      overrideFirstInAt: firstInAt,
+      overrideLastOutAt: lastOutAt,
+      addedMinutes,
+      reason,
+      createdBy: viewer.id,
+    })
+    .returning({ id: dayAdjustments.id });
+
+  const days = await recomputeWorkDays({
     orgId: viewer.orgId,
     userId: targetUserId,
     from: input.workDate,
     to: input.workDate,
     rules: rules.attendance,
   });
+
+  // 벗어난 정도를 방금 넣은 행에만 기록한다. 검토는 이 값으로 한다.
+  const final = days.find((d) => d.workDate === input.workDate);
+  await db
+    .update(dayAdjustments)
+    .set({
+      deltaMinutes: deviationMinutes({
+        finalWorkMinutes: final?.workMinutes ?? 0,
+        baselineWorkMinutes: baseline,
+        standardMinutesPerDay: rules.settlement.standardMinutesPerDay,
+      }),
+    })
+    .where(eq(dayAdjustments.id, inserted.id));
 
   // 보정으로 해소된 알림을 지운다
   await syncNotifications(viewer.orgId);
