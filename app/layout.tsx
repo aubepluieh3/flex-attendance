@@ -24,6 +24,7 @@ export default function RootLayout({
             <Link href="/import">근태 파일 반영</Link>
             <Link href="/report">전사 집계</Link>
             <Link href="/periods">정산기간</Link>
+            <Link href="/settings">설정</Link>
             <UserSwitcher />
           </div>
         </nav>
