@@ -1,6 +1,7 @@
 import { DateTime } from "luxon";
 import { loadOrgRules, loadWorkDays } from "@/db/access";
 import { listAdjustments } from "@/db/adjust";
+import { isPeriodClosed } from "@/db/close";
 import { resolvePeriod } from "@/lib/attendance/period";
 import type { ComputedDay, DayFlag } from "@/lib/attendance/types";
 import { now } from "@/lib/clock";
@@ -52,6 +53,7 @@ export default async function RecordsPage() {
 
   const days = await loadWorkDays(viewer, viewer.id, range);
   const history = await listAdjustments(viewer, viewer.id, range);
+  const closed = await isPeriodClosed(viewer.orgId, range);
 
   const byDate = new Map<string, ComputedDay>(days.map((d) => [d.workDate, d]));
   const adjustedDates = new Set(
@@ -84,6 +86,26 @@ export default async function RecordsPage() {
           않고 보정 이력만 쌓입니다.
         </span>
       </p>
+
+      {closed && (
+        <section className="card">
+          <ul className="issues">
+            <li>
+              <span className="icon warn" aria-hidden="true">
+                !
+              </span>
+              <span>
+                <span className="what">마감된 정산기간입니다</span>
+                <br />
+                <span className="why">
+                  확정된 기록은 더 바뀌지 않습니다. 고쳐야 할 게 있으면 HR에
+                  재마감을 요청하세요.
+                </span>
+              </span>
+            </li>
+          </ul>
+        </section>
+      )}
 
       {dates.map((date) => {
         const day = byDate.get(date);
@@ -118,6 +140,7 @@ export default async function RecordsPage() {
               ))}
             </div>
 
+            {closed ? null : (
             <form action={adjustAction} className="adjust">
               <input type="hidden" name="workDate" value={date} />
               <label className="field">
@@ -162,8 +185,9 @@ export default async function RecordsPage() {
               </label>
               <button type="submit">보정</button>
             </form>
+            )}
 
-            {wasAdjusted && (
+            {wasAdjusted && !closed && (
               <form action={revertAction} className="adjust">
                 <input type="hidden" name="workDate" value={date} />
                 <input type="hidden" name="reason" value="보정 취소" />

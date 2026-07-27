@@ -4,6 +4,7 @@ import { resolvePeriod } from "@/lib/attendance/period";
 import type { ComputedDay, DayFlag } from "@/lib/attendance/types";
 import { isDemoClock, now } from "@/lib/clock";
 import { loadOrgRules, loadTimeOff, loadWorkDays } from "@/db/access";
+import { loadPeriodState } from "@/db/close";
 import Link from "next/link";
 import { requestViewer } from "./viewer";
 
@@ -15,6 +16,15 @@ const SCALE_MINUTES = 10 * 60;
 const REFERENCE_MINUTES = 8 * 60;
 
 const WEEKDAY = ["월", "화", "수", "목", "금", "토", "일"];
+
+const SNAPSHOT_LABEL = {
+  targetMinutes: "소정근로",
+  workedMinutes: "실근무",
+  nightMinutes: "야간",
+  holidayMinutes: "휴일근무",
+  overtimeMinutes: "법정초과",
+  avgWeeklyMinutes: "주평균",
+} as const;
 
 const FLAG_LABEL: Record<DayFlag, string> = {
   core_time_violation: "의무근로시간대 미준수",
@@ -83,6 +93,15 @@ export default async function Page() {
   const dates = eachDate(range.start, range.end, zone);
   const byDate = new Map<string, ComputedDay>(days.map((d) => [d.workDate, d]));
 
+  // 마감된 기간은 스냅샷이 공식 기록이다. 지금 재계산한 값과 다르면
+  // 늦게 온 태그나 설정 변경이 있었다는 뜻이므로 드러낸다.
+  const periodState = await loadPeriodState(
+    viewer.orgId,
+    viewer.id,
+    range,
+    summary,
+  );
+
   const paceGap = summary.projectedMinutes - summary.targetMinutes;
   const paceNote =
     summary.paceStatus === "behind"
@@ -145,6 +164,13 @@ export default async function Page() {
       <div className="head">
         <h1>{viewer.name}</h1>
         <span className="team">{viewer.teamName ?? rules.orgName}</span>
+        {periodState.status === "closed" && (
+          <span className="chip">
+            마감됨
+            {periodState.closedAt &&
+              ` · ${DateTime.fromJSDate(periodState.closedAt, { zone }).toFormat("M/d")}`}
+          </span>
+        )}
         {isDemoClock() && <span className="chip">데모 시계</span>}
       </div>
       <p className="sub">
@@ -265,10 +291,32 @@ export default async function Page() {
         {summary.incompleteDates.length === 0 &&
         summary.flaggedDates.length === 0 &&
         summary.timeOffConflicts.length === 0 &&
-        !summary.exceedsAvgWeeklyLimit ? (
+        !summary.exceedsAvgWeeklyLimit &&
+        !periodState.diff?.changed ? (
           <p className="empty">확인할 항목이 없습니다.</p>
         ) : (
           <ul className="issues">
+            {periodState.diff?.changed && (
+              <li>
+                <span className="icon crit" aria-hidden="true">
+                  !
+                </span>
+                <span>
+                  <span className="what">마감 후 값이 바뀌었습니다</span>
+                  <br />
+                  <span className="why">
+                    {Object.entries(periodState.diff.deltas)
+                      .map(
+                        ([key, delta]) =>
+                          `${SNAPSHOT_LABEL[key as keyof typeof SNAPSHOT_LABEL]} ${delta > 0 ? "+" : "−"}${hm(Math.abs(delta))}`,
+                      )
+                      .join(" · ")}
+                    . 공식 기록은 마감 시점 값이며, 반영이 필요하면 HR에
+                    재마감을 요청하세요.
+                  </span>
+                </span>
+              </li>
+            )}
             {summary.exceedsAvgWeeklyLimit && (
               <li>
                 <span className="icon crit" aria-hidden="true">

@@ -2,9 +2,10 @@ import { and, asc, desc, eq, gte, lte } from "drizzle-orm";
 import { DateTime } from "luxon";
 import { db } from "./client";
 import { dayAdjustments, users } from "./schema";
-import { AccessDenied, loadOrgRules, type Viewer } from "./access";
+import { AccessDenied, loadOrgRules, type OrgRules, type Viewer } from "./access";
+import { isPeriodClosed } from "./close";
 import { recomputeWorkDays } from "./recompute";
-import type { PeriodRange } from "@/lib/attendance/period";
+import { resolvePeriod, type PeriodRange } from "@/lib/attendance/period";
 
 /**
  * 예외 보정 입력.
@@ -33,6 +34,23 @@ async function assertCanEdit(viewer: Viewer, targetUserId: string) {
   throw new AccessDenied("본인 기록만 보정할 수 있습니다.");
 }
 
+/**
+ * 마감된 기간은 보정할 수 없다. 마감의 요점이 "확정된 과거가 더는 안 바뀐다"는
+ * 것이므로, 고쳐야 하면 HR이 재마감(reopen)해야 한다.
+ */
+async function assertPeriodOpen(rules: OrgRules, workDate: string) {
+  const range = resolvePeriod(workDate, {
+    kind: rules.settlementKind,
+    weekStartDay: rules.weekStartDay,
+    timezone: rules.attendance.timezone,
+  });
+  if (await isPeriodClosed(rules.orgId, range)) {
+    throw new AccessDenied(
+      `${range.start} ~ ${range.end} 정산기간은 마감되어 보정할 수 없습니다. HR에 재마감을 요청하세요.`,
+    );
+  }
+}
+
 function combine(
   workDate: string,
   hhmm: string | undefined,
@@ -55,6 +73,7 @@ export async function createAdjustment(
 
   const rules = await loadOrgRules(viewer.orgId);
   const zone = rules.attendance.timezone;
+  await assertPeriodOpen(rules, input.workDate);
 
   let firstInAt = combine(input.workDate, input.firstIn, zone);
   let lastOutAt = combine(input.workDate, input.lastOut, zone);
@@ -110,6 +129,8 @@ export async function revertAdjustment(
   await assertCanEdit(viewer, targetUserId);
 
   const rules = await loadOrgRules(viewer.orgId);
+  await assertPeriodOpen(rules, workDate);
+
   await db.insert(dayAdjustments).values({
     orgId: viewer.orgId,
     userId: targetUserId,
