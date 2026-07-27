@@ -1,4 +1,4 @@
-import { and, asc, eq, gte, lte } from "drizzle-orm";
+import { and, asc, desc, eq, gte, lte } from "drizzle-orm";
 import { DateTime } from "luxon";
 import { db } from "./client";
 import {
@@ -9,7 +9,7 @@ import {
   users,
   workDays,
 } from "./schema";
-import { loadOrgRules, type OrgRules } from "./access";
+import { AccessDenied, loadOrgRules, type OrgRules, type Viewer } from "./access";
 import { resolvePeriod, type PeriodRange } from "@/lib/attendance/period";
 import {
   computePeriodSummary,
@@ -20,6 +20,7 @@ import {
   type SnapshotDiff,
 } from "@/lib/attendance/settle";
 import type { ComputedDay } from "@/lib/attendance/types";
+import { now } from "@/lib/clock";
 
 /**
  * 정산기간 마감.
@@ -94,12 +95,18 @@ async function summaryFor(
 export async function ensurePeriod(
   orgId: string,
   range: PeriodRange,
-): Promise<{ id: string; status: "open" | "closed"; closedAt: Date | null }> {
+): Promise<{
+  id: string;
+  status: "open" | "closed";
+  closedAt: Date | null;
+  reopenedAt: Date | null;
+}> {
   const [existing] = await db
     .select({
       id: settlementPeriods.id,
       status: settlementPeriods.status,
       closedAt: settlementPeriods.closedAt,
+      reopenedAt: settlementPeriods.reopenedAt,
     })
     .from(settlementPeriods)
     .where(
@@ -123,6 +130,7 @@ export async function ensurePeriod(
       id: settlementPeriods.id,
       status: settlementPeriods.status,
       closedAt: settlementPeriods.closedAt,
+      reopenedAt: settlementPeriods.reopenedAt,
     });
 
   if (created) return created;
@@ -175,7 +183,16 @@ export async function closeDuePeriods(
 
     if (isClosable(range.end, rules.closeGraceDays, asOf, zone)) {
       const period = await ensurePeriod(orgId, range);
-      if (period.status === "open") {
+
+      // 재마감 직후에는 유예일이 다시 흐른다. 안 그러면 HR이 고칠 틈도 없이
+      // 배치가 즉시 다시 마감해버린다.
+      const reopenGraceLeft =
+        period.reopenedAt !== null &&
+        DateTime.fromJSDate(period.reopenedAt, { zone })
+          .plus({ days: rules.closeGraceDays })
+          .toJSDate() > asOf;
+
+      if (period.status === "open" && !reopenGraceLeft) {
         let count = 0;
         for (const member of members) {
           const summary = await summaryFor(member.id, range, rules, asOf);
@@ -187,8 +204,7 @@ export async function closeDuePeriods(
               periodId: period.id,
               userId: member.id,
               ...snap,
-            })
-            .onConflictDoNothing();
+            });
           count += 1;
         }
 
@@ -243,6 +259,7 @@ export async function loadPeriodState(
       id: settlementPeriods.id,
       status: settlementPeriods.status,
       closedAt: settlementPeriods.closedAt,
+      reopenedAt: settlementPeriods.reopenedAt,
     })
     .from(settlementPeriods)
     .where(
@@ -256,6 +273,7 @@ export async function loadPeriodState(
     return { status: "open", closedAt: null, snapshot: null, diff: null };
   }
 
+  // 재마감 후 다시 마감하면 스냅샷이 쌓인다. 공식 기록은 가장 최근 것.
   const [row] = await db
     .select()
     .from(periodSnapshots)
@@ -264,7 +282,9 @@ export async function loadPeriodState(
         eq(periodSnapshots.periodId, period.id),
         eq(periodSnapshots.userId, userId),
       ),
-    );
+    )
+    .orderBy(desc(periodSnapshots.capturedAt))
+    .limit(1);
 
   if (!row) {
     return {
@@ -290,6 +310,109 @@ export async function loadPeriodState(
     snapshot,
     diff: diffAgainstSnapshot(snapshot, current),
   };
+}
+
+export type PeriodRow = {
+  id: string;
+  periodStart: string;
+  periodEnd: string;
+  status: "open" | "closed";
+  closedAt: Date | null;
+  reopenedAt: Date | null;
+  snapshotCount: number;
+  events: {
+    action: "close" | "reopen";
+    reason: string | null;
+    actorName: string | null;
+    createdAt: Date;
+  }[];
+};
+
+/** 정산기간 목록 (HR 관리 화면용) */
+export async function listPeriods(orgId: string): Promise<PeriodRow[]> {
+  const periods = await db
+    .select()
+    .from(settlementPeriods)
+    .where(eq(settlementPeriods.orgId, orgId))
+    .orderBy(desc(settlementPeriods.periodStart));
+
+  const rows: PeriodRow[] = [];
+  for (const p of periods) {
+    const snaps = await db
+      .select({ id: periodSnapshots.id })
+      .from(periodSnapshots)
+      .where(eq(periodSnapshots.periodId, p.id));
+
+    const events = await db
+      .select({
+        action: periodCloseEvents.action,
+        reason: periodCloseEvents.reason,
+        actorName: users.name,
+        createdAt: periodCloseEvents.createdAt,
+      })
+      .from(periodCloseEvents)
+      .leftJoin(users, eq(periodCloseEvents.actorUserId, users.id))
+      .where(eq(periodCloseEvents.periodId, p.id))
+      .orderBy(desc(periodCloseEvents.createdAt));
+
+    rows.push({
+      id: p.id,
+      periodStart: p.periodStart,
+      periodEnd: p.periodEnd,
+      status: p.status,
+      closedAt: p.closedAt,
+      reopenedAt: p.reopenedAt,
+      snapshotCount: snaps.length,
+      events,
+    });
+  }
+  return rows;
+}
+
+/**
+ * 재마감. 화면이 "HR에 재마감을 요청하세요"라고 안내하니 실제로 할 수 있어야 한다.
+ *
+ * 스냅샷은 지우지 않는다 — 그 시점에 무엇이 공식 기록이었는지가 감사 대상이다.
+ * 다시 마감되면 새 스냅샷이 쌓이고 최신 것이 공식 기록이 된다.
+ */
+export async function reopenPeriod(
+  viewer: Viewer,
+  periodId: string,
+  reason: string,
+): Promise<void> {
+  if (viewer.role !== "hr") {
+    throw new AccessDenied("재마감은 HR 권한이 필요합니다.");
+  }
+  const text = reason.trim();
+  if (!text) {
+    throw new Error("재마감 사유를 적어 주세요. 확정된 기록을 되돌리는 일입니다.");
+  }
+
+  const [period] = await db
+    .select({ id: settlementPeriods.id, status: settlementPeriods.status })
+    .from(settlementPeriods)
+    .where(
+      and(
+        eq(settlementPeriods.id, periodId),
+        eq(settlementPeriods.orgId, viewer.orgId),
+      ),
+    );
+  if (!period) throw new Error("정산기간을 찾을 수 없습니다.");
+  if (period.status === "open") throw new Error("이미 열려 있는 기간입니다.");
+
+  // lib/clock 의 now()를 쓴다. new Date()를 쓰면 앱 안에 시계가 두 개가 되어
+  // DEMO_CLOCK 이나 테스트 기준 시각과 어긋난다.
+  await db
+    .update(settlementPeriods)
+    .set({ status: "open", closedAt: null, reopenedAt: now() })
+    .where(eq(settlementPeriods.id, periodId));
+
+  await db.insert(periodCloseEvents).values({
+    periodId,
+    action: "reopen",
+    actorUserId: viewer.id,
+    reason: text,
+  });
 }
 
 /** 마감된 기간인지 (보정 차단용) */

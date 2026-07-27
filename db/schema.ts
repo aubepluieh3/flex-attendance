@@ -420,6 +420,11 @@ export const settlementPeriods = pgTable(
     periodEnd: date("period_end", { mode: "string" }).notNull(),
     status: periodStatus("status").notNull().default("open"),
     closedAt: timestamp("closed_at", { withTimezone: true }),
+    /**
+     * HR이 재마감한 시각. 이 값이 있으면 유예일이 다시 흐른다 —
+     * 없으면 재마감 직후 배치가 즉시 다시 마감해서 고칠 틈이 없다.
+     */
+    reopenedAt: timestamp("reopened_at", { withTimezone: true }),
   },
   (t) => [uniqueIndex("settlement_periods_org_start").on(t.orgId, t.periodStart)],
 );
@@ -476,7 +481,18 @@ export const periodSnapshots = pgTable(
       .notNull()
       .defaultNow(),
   },
-  (t) => [uniqueIndex("period_snapshots_period_user").on(t.periodId, t.userId)],
+  /**
+   * 유니크가 아니다. 재마감 후 다시 마감하면 새 스냅샷이 쌓인다 —
+   * 그 시점에 무엇이 공식 기록이었는지가 감사 대상이므로 덮어쓰지 않는다.
+   * 조회는 capturedAt 최신 1건.
+   */
+  (t) => [
+    index("period_snapshots_period_user").on(
+      t.periodId,
+      t.userId,
+      t.capturedAt,
+    ),
+  ],
 );
 
 /**
