@@ -22,6 +22,7 @@ export default function RootLayout({
             <Link href="/records">내 기록 · 보정</Link>
             <Link href="/team">팀 현황</Link>
             <Link href="/import">근태 파일 반영</Link>
+            <Link href="/report">전사 집계</Link>
             <Link href="/periods">정산기간</Link>
             <UserSwitcher />
           </div>

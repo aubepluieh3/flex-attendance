@@ -30,3 +30,25 @@ export function resolvePeriod(
     end: start.plus({ days: 6 }).toISODate()!,
   };
 }
+
+/**
+ * 앞뒤 정산기간. 경계를 직접 더하지 않고 인접한 날짜를 다시 resolve 한다 —
+ * 월 정산에서 기간 길이가 달라도 어긋나지 않는다.
+ */
+export function shiftPeriod(
+  range: PeriodRange,
+  delta: number,
+  opts: { kind: PeriodKind; weekStartDay: number; timezone: string },
+): PeriodRange {
+  let current = range;
+  for (let i = 0; i < Math.abs(delta); i++) {
+    const anchor =
+      delta > 0
+        ? DateTime.fromISO(current.end, { zone: opts.timezone }).plus({ days: 1 })
+        : DateTime.fromISO(current.start, { zone: opts.timezone }).minus({
+            days: 1,
+          });
+    current = resolvePeriod(anchor.toISODate()!, opts);
+  }
+  return current;
+}

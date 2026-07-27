@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { resolvePeriod } from "./period";
+import { resolvePeriod, shiftPeriod } from "./period";
 
 const zone = "Asia/Seoul";
 
@@ -71,6 +71,49 @@ describe("resolvePeriod — 월 정산", () => {
     expect(month("2026-07-31")).toEqual({
       start: "2026-07-01",
       end: "2026-07-31",
+    });
+  });
+});
+
+describe("shiftPeriod — 앞뒤 정산기간", () => {
+  const weekOpts = { kind: "week" as const, weekStartDay: 1, timezone: zone };
+  const monthOpts = { kind: "month" as const, weekStartDay: 1, timezone: zone };
+
+  it("주 정산은 7일씩 움직인다", () => {
+    const base = { start: "2026-07-20", end: "2026-07-26" };
+    expect(shiftPeriod(base, -1, weekOpts)).toEqual({
+      start: "2026-07-13",
+      end: "2026-07-19",
+    });
+    expect(shiftPeriod(base, 1, weekOpts)).toEqual({
+      start: "2026-07-27",
+      end: "2026-08-02",
+    });
+  });
+
+  it("월 정산은 기간 길이가 달라도 어긋나지 않는다", () => {
+    const march = { start: "2026-03-01", end: "2026-03-31" };
+    expect(shiftPeriod(march, -1, monthOpts)).toEqual({
+      start: "2026-02-01",
+      end: "2026-02-28",
+    });
+    expect(shiftPeriod(march, 1, monthOpts)).toEqual({
+      start: "2026-04-01",
+      end: "2026-04-30",
+    });
+  });
+
+  it("여러 칸 움직인다", () => {
+    const base = { start: "2026-07-20", end: "2026-07-26" };
+    expect(shiftPeriod(base, -3, weekOpts).start).toBe("2026-06-29");
+    expect(shiftPeriod(base, 0, weekOpts)).toEqual(base);
+  });
+
+  it("연말을 넘어간다", () => {
+    const dec = { start: "2026-12-01", end: "2026-12-31" };
+    expect(shiftPeriod(dec, 1, monthOpts)).toEqual({
+      start: "2027-01-01",
+      end: "2027-01-31",
     });
   });
 });
