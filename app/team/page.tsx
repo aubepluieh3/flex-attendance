@@ -101,7 +101,12 @@ export default async function TeamPage({
         </span>
       );
     }
-    return <span className="none">오프</span>;
+    return (
+      <span className="status muted inline">
+        <span className="dot" aria-hidden="true" />
+        오프
+      </span>
+    );
   };
 
   return (

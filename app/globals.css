@@ -464,6 +464,23 @@ code {
 .status.crit .dot {
   background: var(--crit);
 }
+/*
+ * 아무 일도 없는 상태(오프).
+ *
+ * 모양은 나머지와 같게 두되 색을 죽인다. 셋이 똑같이 눈에 띄면 "지금 누가
+ * 일하는 중인가"를 찾는 스캔이 안 되고, 오프가 경고처럼 읽히면 안 된다.
+ * 점도 채우지 않고 테두리만 둔다 — 켜져 있지 않다는 뜻이 형태로 보인다.
+ */
+.status.muted {
+  background: var(--surface-2);
+  border: 1px solid var(--line);
+  color: var(--ink-3);
+  font-weight: 550;
+}
+.status.muted .dot {
+  background: transparent;
+  border: 1.5px solid var(--line-strong);
+}
 
 /* ── 통계 타일 ── */
 .tiles {
