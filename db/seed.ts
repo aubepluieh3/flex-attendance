@@ -16,6 +16,7 @@ import {
   workDays,
 } from "./schema";
 import { recomputeWorkDays } from "./recompute";
+import { hashPassword } from "@/lib/password";
 import {
   demoAttendanceRules,
   demoEmployee,
@@ -47,8 +48,12 @@ async function reset() {
   await db.delete(orgs);
 }
 
+const DEMO_PASSWORD = "flex-demo-1234";
+
 async function main() {
   await reset();
+  // 개발용 공통 비밀번호. 운영에서는 초대 메일이나 SSO 로 대체한다.
+  const passwordHash = await hashPassword(DEMO_PASSWORD);
 
   const [org] = await db
     .insert(orgs)
@@ -90,6 +95,7 @@ async function main() {
       employeeNo: demoEmployee.employeeNo,
       teamId: squad.id,
       role: "member",
+      passwordHash,
     })
     .returning();
 
@@ -100,6 +106,7 @@ async function main() {
       employeeNo: "F2016-008",
       teamId: squad.id,
       role: "manager",
+      passwordHash,
     },
     {
       orgId: org.id,
@@ -107,6 +114,7 @@ async function main() {
       employeeNo: "F2014-002",
       teamId: platform.id,
       role: "hr",
+      passwordHash,
     },
   ]);
 
@@ -137,6 +145,7 @@ async function main() {
     rules: demoAttendanceRules,
   });
 
+  console.log(`로그인 비밀번호: ${DEMO_PASSWORD}`);
   console.log(`org ${org.name} · 사용자 3명 · 태그 ${demoTags.length}건`);
   console.log(`work_days ${days.length}건 생성`);
   for (const d of days) {

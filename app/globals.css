@@ -572,3 +572,9 @@ button:disabled {
   padding: 10px 18px;
   text-decoration: none;
 }
+
+.whoami {
+  margin-left: auto;
+  font-size: 12px;
+  color: var(--muted);
+}

@@ -53,13 +53,19 @@ export async function listUsers(): Promise<(Viewer & { employeeNo: string })[]> 
 }
 
 /**
- * 로그인이 붙기 전까지 쓰는 임시 조회.
- * 인자로 사번을 받고, 없으면 DEMO_USER, 그것도 없으면 첫 member.
+ * ⚠ 검증 스크립트 전용. 비밀번호 없이 사번만으로 Viewer 를 만든다.
  *
- * 쿠키 읽기는 app 레이어(app/viewer.ts)에 둔다 — 여기서 next/headers를 쓰면
- * 요청 밖에서 도는 스크립트(db/access.check.ts)가 깨진다.
+ * 앱 코드는 절대 쓰지 말 것 — 인증 우회가 된다. 화면은 app/viewer.ts 의
+ * requestViewer() 를 쓰고, 그건 세션 쿠키를 검증한다.
+ * 실수로 배포되는 걸 막기 위해 프로덕션에서는 던진다.
  */
 export async function currentViewer(employeeNo?: string): Promise<Viewer> {
+  if (process.env.NODE_ENV === "production") {
+    throw new Error(
+      "currentViewer 는 검증 스크립트 전용입니다. 앱에서는 requestViewer 를 쓰세요.",
+    );
+  }
+
   const rows = await listUsers();
   if (rows.length === 0) {
     throw new Error("사용자가 없습니다. npm run db:seed 를 먼저 실행하세요.");

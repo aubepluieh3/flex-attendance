@@ -215,6 +215,8 @@ export const users = pgTable(
     employeeNo: text("employee_no").notNull(),
     /** 나중에 SSO 붙일 자리 */
     externalId: text("external_id"),
+    /** scrypt 해시. SSO만 쓰는 사용자는 null 이라 로그인이 불가하다. */
+    passwordHash: text("password_hash"),
     teamId: uuid("team_id").references(() => teams.id),
     role: userRole("role").notNull().default("member"),
     active: boolean("active").notNull().default(true),
@@ -492,6 +494,33 @@ export const periodSnapshots = pgTable(
       t.userId,
       t.capturedAt,
     ),
+  ],
+);
+
+/**
+ * 로그인 세션.
+ *
+ * 서명 쿠키 대신 테이블로 둔다. 매 요청 어차피 사용자를 DB에서 읽으므로
+ * 비용 차이가 없고, 로그아웃과 강제 만료가 확실해진다.
+ * 토큰 원본은 쿠키에만 있고 DB에는 SHA-256 해시를 저장한다 — DB가 유출돼도
+ * 세션을 탈취할 수 없다.
+ */
+export const sessions = pgTable(
+  "sessions",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    userId: uuid("user_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    tokenHash: text("token_hash").notNull(),
+    expiresAt: timestamp("expires_at", { withTimezone: true }).notNull(),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+  },
+  (t) => [
+    uniqueIndex("sessions_token_hash").on(t.tokenHash),
+    index("sessions_user").on(t.userId),
   ],
 );
 
