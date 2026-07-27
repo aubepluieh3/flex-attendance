@@ -8,6 +8,8 @@ out/
 *.tsbuildinfo
 .env
 .env.*
+# 필요한 환경변수 목록은 저장소에 남긴다 (값은 없음)
+!.env.example
 data/*.db
 data/*.db-journal
 .vscode/

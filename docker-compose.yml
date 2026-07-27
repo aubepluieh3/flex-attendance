@@ -1,0 +1,25 @@
+services:
+  db:
+    image: postgres:17-alpine
+    container_name: flex-attendance-db
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: flex
+      POSTGRES_PASSWORD: flex
+      POSTGRES_DB: flex_attendance
+      # 컨테이너 시간대는 UTC로 둔다. 저장은 항상 UTC, 표시만 KST.
+      TZ: UTC
+      PGTZ: UTC
+    ports:
+      # 5432가 이미 쓰이는 경우가 많아 비켜 쓴다
+      - "5442:5432"
+    volumes:
+      - flex-pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U flex -d flex_attendance"]
+      interval: 3s
+      timeout: 3s
+      retries: 20
+
+volumes:
+  flex-pgdata:
