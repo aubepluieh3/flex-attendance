@@ -5,6 +5,7 @@ import { cookies } from "next/headers";
 import { changeOwnPassword } from "@/db/people";
 import { SESSION_COOKIE } from "@/db/auth";
 import { requestViewer } from "../viewer";
+import { reportActionError } from "../action-error";
 
 export type AccountState = { message?: string; error?: string };
 
@@ -34,6 +35,9 @@ export async function changePasswordAction(
       message: "비밀번호를 바꿨습니다. 다른 기기의 로그인은 모두 끊겼습니다.",
     };
   } catch (e) {
+    // rethrowControlFlow 가 없어서 세션이 끊겼을 때 "NEXT_REDIRECT" 가
+    // 사용자 메시지로 나갈 수 있었다. ui.guard.test.ts 가 잡았다.
+    await reportActionError("accountAction", e);
     return { error: (e as Error).message };
   }
 }

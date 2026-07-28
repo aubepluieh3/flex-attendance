@@ -1,3 +1,12 @@
+/*
+ * ⚠ 여기서 "확인 필요" 항목을 늘릴 때 먼저 물을 것:
+ *
+ *     "이 항목을 정직하게 신고하면 그 사람에게 무슨 일이 생기나?"
+ *
+ * 팀장 화면에 올라간다는 건 그 사람이 의심받는다는 뜻이다. 정직한 신고가
+ * 의심으로 돌아오면 아무도 신고하지 않는다.
+ * 자세한 배경은 lib/attendance/settle.ts 상단에 있다.
+ */
 import { and, asc, eq, gte, inArray, lte, ne } from "drizzle-orm";
 import { db } from "./client";
 import { accessLogs, dayAdjustments, teams, timeOff, users, workDays } from "./schema";
