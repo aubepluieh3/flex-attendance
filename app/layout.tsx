@@ -3,7 +3,9 @@ import Link from "next/link";
 import "./globals.css";
 import { optionalViewer } from "./viewer";
 import { logoutAction } from "./login/actions";
-import { unreadCount } from "@/db/notify";
+import { after } from "next/server";
+import { syncIfStale, unreadCount } from "@/db/notify";
+import { now } from "@/lib/clock";
 import { Nav } from "./nav";
 
 export const metadata: Metadata = {
@@ -24,6 +26,20 @@ export default async function RootLayout({
   children: React.ReactNode;
 }) {
   const viewer = await optionalViewer();
+
+  /*
+   * 앱을 열 때 알림을 맞춘다.
+   *
+   * after() 로 응답 뒤에 돌린다 — 기다리면 페이지가 그만큼 늦게 뜨고, 배지
+   * 숫자 하나 때문에 전 화면을 붙잡을 이유가 없다. 이번 화면의 배지는 한 번
+   * 낡을 수 있고 다음 이동에서 맞는다. 알림 화면은 직접 기다린다.
+   */
+  if (viewer) {
+    after(async () => {
+      await syncIfStale(viewer.orgId, now());
+    });
+  }
+
   const unread = viewer ? await unreadCount(viewer) : 0;
 
   // 로그인 전에는 사이드바를 두지 않는다

@@ -1,7 +1,8 @@
 import Link from "next/link";
 import { DateTime } from "luxon";
 import { loadOrgRules } from "@/db/access";
-import { listNotifications, markAllRead } from "@/db/notify";
+import { listNotifications, markAllRead, syncIfStale } from "@/db/notify";
+import { now } from "@/lib/clock";
 import { requestViewer } from "../viewer";
 
 export const dynamic = "force-dynamic";
@@ -13,12 +14,20 @@ const KIND_TONE: Record<string, "warn" | "crit"> = {
   period_closing: "warn",
   post_close_change: "crit",
   team_review: "warn",
+  time_off_pending: "warn",
+  time_off_decided: "warn",
 };
 
 export default async function NotificationsPage() {
   const viewer = await requestViewer("/notifications");
   const rules = await loadOrgRules(viewer.orgId);
   const zone = rules.attendance.timezone;
+
+  /*
+   * 여기서는 기다린다. 알림을 보러 들어온 화면이 낡은 목록을 보여주면
+   * 그게 이 화면의 유일한 일을 못 한 것이다.
+   */
+  await syncIfStale(viewer.orgId, now());
   const rows = await listNotifications(viewer);
   const unread = rows.filter((r) => !r.readAt).length;
 
@@ -38,8 +47,8 @@ export default async function NotificationsPage() {
         확인이 필요한 항목이 여기 모입니다.
         <br />
         <span className="dim">
-          근태 기록은 파일로 들어오므로 실시간 알림은 없습니다. 파일이 반영되거나
-          기록을 보정할 때 다시 계산됩니다. 해결하면 목록에서 사라집니다.
+          이 화면을 열 때 다시 계산합니다. 해결하면 목록에서 사라집니다 — 읽음
+          표시를 해야 없어지는 게 아닙니다.
         </span>
       </p>
 

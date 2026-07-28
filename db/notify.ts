@@ -379,6 +379,45 @@ export async function syncNotifications(
   return { created, resolved: stale.length };
 }
 
+/**
+ * 앱을 열 때 갱신.
+ *
+ * 시간이 지나야 조건이 생기는 알림이 있다 — 어제 안 닫힌 세션이 "퇴근 기록
+ * 없음"이 되는 것, 유예일이 지나 "마감 임박"이 되는 것. 쓰기 액션에만
+ * 붙여두면 아무도 쓰지 않는 날에는 알림이 안 생긴다.
+ *
+ * 배치로 돌릴 필요는 없다. 알림은 앱 안에서만 보이므로(이메일·푸시 없음)
+ * 사용자가 여는 시점에 맞으면 충분하다. 새벽에 만들어 둘 이유가 없다.
+ *
+ * 문턱을 두는 이유: 매 요청마다 전사 재계산은 비싸다. 근태는 하루 한두 번
+ * 열어보는 앱이라 몇 분 단위면 충분하다.
+ *
+ * 마지막 시각을 메모리에 두는 이유: 인스턴스가 여러 개면 각자 한 번씩 돌지만
+ * sync 는 멱등이라 결과가 같다. DB 컬럼을 늘리는 값이 아직 없다.
+ */
+const SYNC_THROTTLE_MS = 5 * 60_000;
+const lastSyncAt = new Map<string, number>();
+
+export async function syncIfStale(
+  orgId: string,
+  asOf: Date = now(),
+): Promise<boolean> {
+  const prev = lastSyncAt.get(orgId);
+  if (prev !== undefined && asOf.getTime() - prev < SYNC_THROTTLE_MS) {
+    return false;
+  }
+  // 먼저 찍어서 같은 순간에 들어온 요청들이 같이 돌지 않게 한다
+  lastSyncAt.set(orgId, asOf.getTime());
+  try {
+    await syncNotifications(orgId, asOf);
+    return true;
+  } catch (e) {
+    // 실패했으면 문턱을 풀어 다음 요청이 다시 시도하게 둔다
+    lastSyncAt.delete(orgId);
+    throw e;
+  }
+}
+
 export type NotificationRow = {
   id: string;
   kind: Draft["kind"];
