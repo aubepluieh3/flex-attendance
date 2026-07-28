@@ -138,6 +138,23 @@ export async function resetPassword(
 ): Promise<{ tempPassword: string }> {
   assertHr(viewer);
 
+  /*
+   * 자기 자신은 여기서 못 한다.
+   *
+   * 초기화는 그 사람의 세션을 전부 끊는다. 본인에게 하면 즉시 로그아웃되고,
+   * 임시 비밀번호는 화면에 뜨기 전에 로그인 화면으로 튕겨서 사라진다.
+   * 결과는 HR 스스로 잠기는 것이다 — 실제로 걸려봤다.
+   *
+   * 비밀번호를 바꾸려면 내 계정 화면을 쓰고(현재 비밀번호를 알아야 한다),
+   * 정말 잊었으면 서버에서 npm run db:reset-password 를 쓴다.
+   */
+  if (userId === viewer.id) {
+    throw new Error(
+      "본인 비밀번호는 여기서 초기화할 수 없습니다. 내 계정 화면에서 변경하세요. " +
+        "비밀번호를 잊었다면 서버에서 npm run db:reset-password 를 실행해야 합니다.",
+    );
+  }
+
   const tempPassword = generateTempPassword();
   const updated = await db
     .update(users)

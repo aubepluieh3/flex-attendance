@@ -204,24 +204,35 @@ export function PeopleManager({
                   <td className="none">{p.sessionCount}</td>
                   <td>
                     <div className="row-actions">
-                      <form action={action} className="inline">
-                        <input type="hidden" name="op" value="reset" />
-                        <input type="hidden" name="userId" value={p.id} />
-                        <input type="hidden" name="name" value={p.name} />
-                        <input
-                          type="hidden"
-                          name="employeeNo"
-                          value={p.employeeNo}
-                        />
-                        {/* 누르면 그 사람의 기존 비밀번호가 즉시 못 쓰게 된다 */}
-                        <button
-                          type="submit"
-                          className="danger"
-                          disabled={pending}
-                        >
-                          비밀번호 초기화
-                        </button>
-                      </form>
+                      {/*
+                        본인 줄에는 초기화 버튼을 두지 않는다.
+                        누르면 세션이 끊겨서 임시 비밀번호를 보기 전에 로그인
+                        화면으로 튕기고, HR 이 스스로 잠긴다. 실제로 걸려봤다.
+                      */}
+                      {p.id === viewerId ? (
+                        <span className="none" style={{ fontSize: 12 }}>
+                          비밀번호는 내 계정에서 변경
+                        </span>
+                      ) : (
+                        <form action={action} className="inline">
+                          <input type="hidden" name="op" value="reset" />
+                          <input type="hidden" name="userId" value={p.id} />
+                          <input type="hidden" name="name" value={p.name} />
+                          <input
+                            type="hidden"
+                            name="employeeNo"
+                            value={p.employeeNo}
+                          />
+                          {/* 누르면 그 사람의 기존 비밀번호가 즉시 못 쓰게 된다 */}
+                          <button
+                            type="submit"
+                            className="danger"
+                            disabled={pending}
+                          >
+                            비밀번호 초기화
+                          </button>
+                        </form>
+                      )}
                       {p.id !== viewerId && (
                         <form action={action} className="inline">
                           <input type="hidden" name="op" value="active" />

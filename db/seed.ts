@@ -4,6 +4,7 @@ import { db, pool } from "./client";
 import {
   accessLogs,
   attendanceLogs,
+  errorLogs,
   dayAdjustments,
   holidays,
   importBatches,
@@ -49,6 +50,8 @@ async function reset() {
   // FK 순서대로 비운다
   await db.delete(notifications);
   await db.delete(loginAttempts);
+  // users 를 참조하므로 사용자보다 먼저 지워야 한다
+  await db.delete(errorLogs);
   await db.delete(sessions);
   await db.delete(accessLogs);
   await db.delete(periodSnapshots);
