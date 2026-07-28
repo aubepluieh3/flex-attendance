@@ -1,0 +1,20 @@
+{
+  "permissions": {
+    "deny": [
+      "Read(//c/Users/psh/claude-lab/solo/**)", 
+      "Read(//c/Users/psh/claude-lab/bear-puzzle/**)", 
+      "Read(//c/Users/psh/claude-lab/pair/expense-tracker/**)", 
+      "Read(//c/Users/psh/claude-lab/pair/mung-mate/**)", 
+      "Read(//c/Users/psh/claude-lab/pair/mwo-ipji/**)", 
+      "Read(//c/Users/psh/claude-lab/pair/trip-planner/**)",
+
+      "PowerShell(Set-Content:*)",
+      "PowerShell(Add-Content:*)",
+      "PowerShell(Out-File:*)",
+      "Bash(tee:*)",
+      "Bash(sed -i:*)",
+      "Bash(perl -i:*)",
+      "Bash(truncate:*)"
+    ]
+  }
+}
