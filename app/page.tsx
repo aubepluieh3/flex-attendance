@@ -501,76 +501,101 @@ export default async function Page({
         )}
       </section>
 
+      {/*
+        일별 근무 — 가로 목록.
+        세로 막대는 툴팁이 hover 라서 폰에서 숫자를 볼 수 없었다. 주 정산이면
+        7칸이라 버티지만 월 정산이면 31칸이 실오라기가 된다. 가로로 두면
+        날짜·막대·시간·상태가 한 줄에 같이 들어가서 툴팁이 필요 없다.
+      */}
       <section className="card">
-        <h2>일별 근무시간</h2>
-        <div className="chart">
-          <div
-            className="ref"
-            style={{ bottom: `${(REFERENCE_MINUTES / SCALE_MINUTES) * 100}%` }}
-          >
-            <span>8시간</span>
-          </div>
+        <h2>일별 근무</h2>
+        <ul className="daybars">
           {dates.map((date) => {
             const d = byDate.get(date);
             const l = label(date, zone);
-            if (!d) {
-              return (
-                <div className="col" key={date} tabIndex={0}>
-                  <div className="tip">
-                    {l.md}({l.dow}) · 기록 없음
-                  </div>
-                </div>
-              );
-            }
-            if (d.status === "incomplete") {
-              return (
-                <div className="col" key={date} tabIndex={0}>
-                  <div className="bar incomplete" style={{ height: "100%" }} />
-                  <div className="tip">
-                    {l.md}({l.dow}) · 퇴근 기록 없음 — 집계 제외
-                  </div>
-                </div>
-              );
-            }
-            return (
-              <div className="col" key={date} tabIndex={0}>
-                <div
-                  className="bar"
-                  style={{
-                    height: `${Math.min(100, (d.workMinutes / SCALE_MINUTES) * 100)}%`,
-                  }}
-                />
-                <div className="tip">
-                  {l.md}({l.dow}) · 실근무 {hm(d.workMinutes)}
-                  <br />
-                  {d.sessionCount > 1
-                    ? `${d.sessionCount}번 나눠 근무`
-                    : `${clock(d.firstInAt, zone)}~${clock(d.lastOutAt, zone)}`}
-                  {" · 휴게 "}
-                  {hm(d.breakMinutes)}
-                </div>
-              </div>
-            );
-          })}
-        </div>
-        <div className="xaxis">
-          {dates.map((date) => {
-            const l = label(date, zone);
+            const dayOff = offByDate.get(date);
             const weekend = rules.attendance.weekendDays.includes(
               DateTime.fromISO(date, { zone }).weekday,
             );
+            const width = d
+              ? Math.min(100, (d.workMinutes / SCALE_MINUTES) * 100)
+              : 0;
+            const overLimit = d?.flags.includes("over_daily_limit");
+
+            /** 오른쪽에 쓸 값. 시간이 없으면 왜 없는지를 쓴다. */
+            const value =
+              d && d.status === "open" ? (
+                <>
+                  {hm(minutesIncludingOpen(d, rules.attendance, asOf))}
+                  <span className="note">근무 중</span>
+                </>
+              ) : d && d.status === "incomplete" ? (
+                <span className="warn">퇴근 기록 없음</span>
+              ) : d ? (
+                <>
+                  {hm(d.workMinutes)}
+                  {d.sessionCount > 1 && (
+                    <span className="note">{d.sessionCount}번 나눠</span>
+                  )}
+                </>
+              ) : dayOff ? (
+                <span className="off">{OFF_LABEL[dayOff.kind]}</span>
+              ) : (
+                <span className="off">{date > asOfDate ? "—" : "기록 없음"}</span>
+              );
+
             return (
-              <div key={date} className={weekend ? "we" : undefined}>
-                {l.dow}
-              </div>
+              <li key={date} className={weekend ? "we" : undefined}>
+                <div className="d">
+                  {l.md} <span>({l.dow})</span>
+                </div>
+                <div
+                  className="prog"
+                  role="img"
+                  aria-label={
+                    d ? `실근무 ${hm(d.workMinutes)}` : "근무 기록 없음"
+                  }
+                >
+                  {width > 0 && (
+                    <span
+                      className={
+                        overLimit
+                          ? "fill over"
+                          : d?.status === "open"
+                            ? "fill open"
+                            : "fill"
+                      }
+                      style={{ width: `${width}%` }}
+                    />
+                  )}
+                  {/*
+                    눈금 = 1일 소정근로. 없으면 막대가 많은지 적은지 모른다.
+                    아직 오지 않은 날에는 그리지 않는다 — 안 지난 날에 기준선을
+                    두면 "여기까지 못 채웠다"로 읽힌다.
+                  */}
+                  {date <= asOfDate && (
+                    <i
+                      className="tick"
+                      style={{
+                        left: `${(REFERENCE_MINUTES / SCALE_MINUTES) * 100}%`,
+                      }}
+                    />
+                  )}
+                </div>
+                <div className="v">{value}</div>
+              </li>
             );
           })}
-        </div>
+        </ul>
+        <p className="empty" style={{ marginTop: 12 }}>
+          눈금은 1일 소정근로 {hm(REFERENCE_MINUTES)}입니다. 자율 출근제는
+          하루가 아니라 정산기간 총량으로 맞추면 됩니다.
+        </p>
       </section>
 
-      {/* 표 뷰 — 색에만 의존하지 않기 위해 항상 둔다 */}
-      <section className="card">
-        <h2>기록</h2>
+      {/* 정확한 숫자는 접어 둔다. 색에만 의존하지 않기 위해 표를 없애지 않는다 */}
+      <details className="fold" style={{ marginBottom: 14 }}>
+        <summary>숫자로 보기</summary>
         <div className="scroll-x">
           <table>
             <thead>
@@ -648,7 +673,7 @@ export default async function Page({
             </tbody>
           </table>
         </div>
-      </section>
+      </details>
     </main>
   );
 }

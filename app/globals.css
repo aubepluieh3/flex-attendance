@@ -653,95 +653,6 @@ code {
   font-size: 13.5px;
 }
 
-/* ── 일별 차트 ── */
-.chart {
-  position: relative;
-  height: 172px;
-  border-bottom: 1px solid var(--axis);
-  display: flex;
-  align-items: flex-end;
-  gap: 3px;
-}
-.ref {
-  position: absolute;
-  left: 0;
-  right: 0;
-  border-top: 1px dashed var(--line-strong);
-  pointer-events: none;
-}
-.ref span {
-  position: absolute;
-  right: 0;
-  top: -17px;
-  font-size: 11px;
-  color: var(--ink-3);
-  background: var(--surface);
-  padding: 0 5px;
-}
-.col {
-  position: relative;
-  flex: 1;
-  height: 100%;
-  display: flex;
-  align-items: flex-end;
-  justify-content: center;
-}
-.bar {
-  width: 62%;
-  max-width: 40px;
-  border-radius: 5px 5px 0 0;
-  background: var(--series);
-}
-/* 미완료는 색이 아니라 형태로 구분한다 */
-.bar.incomplete {
-  background: repeating-linear-gradient(
-    135deg,
-    var(--warn-soft) 0 5px,
-    transparent 5px 10px
-  );
-  border: 1px dashed var(--warn);
-  border-bottom: none;
-}
-.xaxis {
-  display: flex;
-  gap: 3px;
-  margin-top: 9px;
-}
-.xaxis > div {
-  flex: 1;
-  text-align: center;
-  font-size: 11.5px;
-  font-weight: 550;
-  color: var(--ink-3);
-}
-.xaxis .we {
-  color: var(--line-strong);
-}
-
-.tip {
-  position: absolute;
-  bottom: 100%;
-  left: 50%;
-  transform: translate(-50%, -8px);
-  background: var(--ink);
-  color: var(--bg);
-  font-size: 12px;
-  line-height: 1.5;
-  padding: 7px 10px;
-  border-radius: 8px;
-  white-space: nowrap;
-  opacity: 0;
-  pointer-events: none;
-  transition: opacity 0.12s;
-  z-index: 3;
-  font-variant-numeric: tabular-nums;
-  box-shadow: var(--shadow-md);
-}
-.col:hover .tip,
-.col:focus-visible .tip {
-  opacity: 1;
-}
-
 /* ── 표 ── */
 /*
  * 표는 자기 안에서만 가로 스크롤한다.
@@ -1119,6 +1030,92 @@ button.pill:hover {
 .roster .nums .over {
   color: var(--crit-ink);
   font-weight: 650;
+}
+
+/*
+ * ── 일별 근무 (가로 목록) ──
+ * 세로 막대는 툴팁이 hover 라서 폰에서 숫자를 못 본다. 가로로 두면 날짜·막대·
+ * 시간이 한 줄에 들어가서 툴팁 없이 읽힌다. 월 정산(31일)에서도 안 무너진다.
+ */
+.daybars {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.daybars > li {
+  display: grid;
+  grid-template-columns: 74px minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 12px;
+  padding: 7px 8px;
+  border-radius: 8px;
+}
+.daybars > li:hover {
+  background: var(--surface-2);
+}
+.daybars .d {
+  font-size: 12.5px;
+  font-weight: 600;
+  color: var(--ink-2);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+.daybars .d span {
+  color: var(--ink-3);
+  font-weight: 550;
+}
+.daybars > li.we .d,
+.daybars > li.we .d span {
+  color: var(--ink-3);
+}
+.daybars .v {
+  font-size: 13px;
+  font-weight: 650;
+  color: var(--ink);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+  text-align: right;
+  min-width: 92px;
+}
+.daybars .v .note {
+  display: block;
+  font-size: 11px;
+  font-weight: 550;
+  color: var(--ink-3);
+}
+.daybars .v .off {
+  font-weight: 550;
+  color: var(--ink-3);
+}
+.daybars .v .warn {
+  font-size: 12px;
+  font-weight: 650;
+  color: var(--warn-ink);
+}
+/* 5분 일한 날도 "일했다"가 보여야 한다. 0.5% 는 화면에서 사라진다 */
+.daybars .prog .fill {
+  min-width: 4px;
+}
+/* 진행 중인 날은 아직 확정이 아니다 — 채움을 흐리게 둔다 */
+.daybars .prog .fill.open {
+  background: var(--accent);
+  opacity: 0.45;
+}
+.daybars .prog .fill.over {
+  background: var(--crit);
+}
+@media (max-width: 700px) {
+  .daybars > li {
+    grid-template-columns: 66px minmax(0, 1fr) auto;
+    gap: 8px;
+    padding: 7px 4px;
+  }
+  .daybars .v {
+    min-width: 74px;
+  }
 }
 .prog .tick {
   position: absolute;
