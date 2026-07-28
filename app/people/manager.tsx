@@ -213,7 +213,12 @@ export function PeopleManager({
                           name="employeeNo"
                           value={p.employeeNo}
                         />
-                        <button type="submit" className="pill" disabled={pending}>
+                        {/* 누르면 그 사람의 기존 비밀번호가 즉시 못 쓰게 된다 */}
+                        <button
+                          type="submit"
+                          className="danger"
+                          disabled={pending}
+                        >
                           비밀번호 초기화
                         </button>
                       </form>
@@ -226,9 +231,10 @@ export function PeopleManager({
                             name="active"
                             value={p.active ? "0" : "1"}
                           />
+                          {/* 비활성화는 로그인을 막는다. 되살리는 건 그냥 부차 행동 */}
                           <button
                             type="submit"
-                            className="pill"
+                            className={p.active ? "danger" : "pill"}
                             disabled={pending}
                           >
                             {p.active ? "비활성화" : "활성화"}

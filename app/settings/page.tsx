@@ -334,7 +334,8 @@ export default async function SettingsPage({
                   <td>
                     <form action={removeHolidayAction}>
                       <input type="hidden" name="id" value={h.id} />
-                      <button type="submit" className="pill">
+                      {/* 지우면 그 날의 근무 집계가 바뀐다 — 되돌리기 어려운 쪽 */}
+                      <button type="submit" className="danger">
                         삭제
                       </button>
                     </form>
@@ -428,7 +429,7 @@ export default async function SettingsPage({
                   <td>
                     <form action={removeTimeOffAction}>
                       <input type="hidden" name="id" value={t.id} />
-                      <button type="submit" className="pill">
+                      <button type="submit" className="danger">
                         삭제
                       </button>
                     </form>

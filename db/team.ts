@@ -43,6 +43,13 @@ export type MemberRow = {
     adjustmentOverThreshold: boolean;
     /** 태그가 아예 없는 날에 들어온 보정 — 값과 무관하게 항상 올린다 */
     zeroTagAdjustments: number;
+    /**
+     * 지난 날 근무가 종료되지 않았다.
+     *
+     * 정산기간과 무관하게 올린다 — 안 그러면 "확인할 항목이 없습니다"라고
+     * 써 놓고 옆에서 '종료 안 됨' 칩을 보여주는 모순이 생긴다. 실제로 그랬다.
+     */
+    staleSessionDate: string | null;
     total: number;
   };
 };
@@ -235,6 +242,10 @@ export async function loadTeamRows(
     const zeroTagAdjustments =
       zeroTagDays > Math.floor(summary.businessDays / 2) ? zeroTagDays : 0;
 
+    const open = openSessions.get(person.id);
+    const staleSessionDate =
+      open && open.workDate < today ? open.workDate : null;
+
     const review = {
       incomplete: summary.incompleteDates.length,
       violations: summary.flaggedDates.length + summary.timeOffConflicts.length,
@@ -242,6 +253,7 @@ export async function loadTeamRows(
       adjustmentMinutes,
       adjustmentOverThreshold,
       zeroTagAdjustments,
+      staleSessionDate,
       total: 0,
     };
     review.total =
@@ -249,9 +261,9 @@ export async function loadTeamRows(
       review.violations +
       (review.exceedsLegalLimit ? 1 : 0) +
       (review.adjustmentOverThreshold ? 1 : 0) +
-      review.zeroTagAdjustments;
+      review.zeroTagAdjustments +
+      (staleSessionDate ? 1 : 0);
 
-    const open = openSessions.get(person.id);
     const presence: Presence = !open
       ? { state: "off" }
       : open.workDate >= today

@@ -17,7 +17,12 @@
 
   --ink: #17171a;
   --ink-2: #55555c;
-  --ink-3: #8a8a92;
+  /*
+   * 보조 텍스트. #8a8a92 는 흰 배경에서 3.43:1 로 WCAG AA(4.5:1) 미달이었다.
+   * "기록 없음", "오프", 타일 레이블처럼 정보를 담은 글자가 여기 걸려 있어서
+   * 자리마다 고치는 대신 토큰을 올렸다. ink-2 와는 여전히 구분된다.
+   */
+  --ink-3: #71717a;
 
   --line: #e7e7e4;
   --line-strong: #d6d6d1;
@@ -59,7 +64,7 @@
     --sidebar: #111114;
     --ink: #f4f4f5;
     --ink-2: #a9a9b2;
-    --ink-3: #74747c;
+    --ink-3: #8c8c96;
     --line: #26262c;
     --line-strong: #34343c;
     --accent: #3987e5;
@@ -87,7 +92,7 @@
   --sidebar: #111114;
   --ink: #f4f4f5;
   --ink-2: #a9a9b2;
-  --ink-3: #74747c;
+  --ink-3: #8c8c96;
   --line: #26262c;
   --line-strong: #34343c;
   --accent: #3987e5;
@@ -932,18 +937,44 @@ button:disabled {
   filter: none;
 }
 
-button.pill {
-  font-size: 12.5px;
-  font-weight: 600;
-  padding: 6px 12px;
-  border-radius: var(--radius-pill);
+/*
+ * 버튼 모양은 세 가지 뜻만 말한다.
+ *
+ *   button        이 폼의 주 행동 (파랑 채움)
+ *   button.pill   부차 행동 (테두리)        — 반려, 취소 처럼 주 행동과 나란히 놓임
+ *   button.danger 되돌리기 어려운 행동 (빨강 테두리) — 삭제, 재마감, 승인 취소
+ *
+ * 크기와 라운드는 셋이 같다. 나란히 놓이는 버튼끼리 높이가 다르면(전에는
+ * 승인 41px / 반려 33px) 한 벌로 안 보이고 부차 쪽이 눌러도 되는지 헷갈린다.
+ *
+ * 알약(999px) 모양은 이제 누를 수 없는 것 전용이다 — .tag, .chip, .status.
+ * 그러면 "둥근 건 표시, 각진 건 버튼"이 규칙이 된다.
+ */
+button.pill,
+button.danger {
+  /* 주 행동과 높이가 정확히 같아야 한 벌로 보인다 (41px) */
+  font-size: 13.5px;
+  font-weight: 620;
+  padding: 9px 14px;
+  border-radius: var(--radius);
   background: var(--surface);
+}
+button.pill {
   border: 1px solid var(--line-strong);
   color: var(--ink-2);
 }
 button.pill:hover {
   background: var(--surface-2);
   color: var(--ink);
+  filter: none;
+}
+button.danger {
+  border: 1px solid var(--crit);
+  color: var(--crit-ink);
+}
+button.danger:hover {
+  background: var(--crit-soft);
+  color: var(--crit-ink);
   filter: none;
 }
 
@@ -1006,18 +1037,39 @@ button.pill:hover {
 .adjust-box {
   margin-top: 12px;
 }
+/*
+ * 펼치기는 버튼처럼 생기면 안 된다.
+ *
+ * 전에는 "숫자로 보기"와 "반려"가 똑같이 생겼다 — 하나는 열기고 하나는
+ * 실행인데 눌러보기 전에 구분이 안 됐다. 삼각형과 밑줄로 "여기 더 있다"를
+ * 말하고, 채움도 테두리도 두지 않는다.
+ */
 .adjust-box > summary,
 .fold > summary {
   cursor: pointer;
-  display: inline-block;
-  font-size: 12.5px;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 13px;
   font-weight: 600;
-  color: var(--ink-2);
-  padding: 6px 12px;
-  border-radius: var(--radius-pill);
-  border: 1px solid var(--line-strong);
-  background: var(--surface);
+  color: var(--accent-ink);
+  padding: 6px 2px;
   list-style: none;
+  text-decoration: underline;
+  text-decoration-thickness: 1px;
+  text-underline-offset: 3px;
+  /* 손가락으로 누를 수 있게 */
+  min-height: 32px;
+}
+.adjust-box > summary::before,
+.fold > summary::before {
+  content: "▸";
+  font-size: 11px;
+  transition: transform 0.12s;
+}
+.adjust-box[open] > summary::before,
+.fold[open] > summary::before {
+  transform: rotate(90deg);
 }
 .adjust-box > summary::-webkit-details-marker,
 .fold > summary::-webkit-details-marker {
@@ -1025,8 +1077,7 @@ button.pill:hover {
 }
 .adjust-box > summary:hover,
 .fold > summary:hover {
-  color: var(--ink);
-  background: var(--surface-2);
+  color: var(--accent);
 }
 .adjust-box[open] > summary,
 .fold[open] > summary {
@@ -1057,6 +1108,24 @@ button.pill:hover {
 .roster > li {
   display: grid;
   gap: 6px;
+}
+/*
+ * 넓은 화면에서는 세 칸으로 나눈다.
+ *
+ * 한 줄로 쌓아두면 1280px 에서 바가 878px 이 되어, 눈금과 채움 끝을 눈으로
+ * 비교하기 어렵고 이름(왼쪽)과 남은 시간(오른쪽) 사이 시선 이동이 크다.
+ * 바는 눈금이 읽히는 폭까지만 준다.
+ */
+@media (min-width: 861px) {
+  .roster > li {
+    grid-template-columns: 210px minmax(0, 400px) 1fr;
+    align-items: center;
+    gap: 8px 20px;
+  }
+  .roster .nums {
+    justify-content: flex-start;
+    gap: 16px;
+  }
 }
 .roster .who {
   display: flex;

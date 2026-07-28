@@ -146,7 +146,8 @@ export default async function PeriodsPage({
                       placeholder="누락 태그 반영을 위해 다시 엽니다"
                     />
                   </label>
-                  <button type="submit" className="pill">
+                  {/* 확정된 공식 기록을 다시 여는 것이다 */}
+                  <button type="submit" className="danger">
                     재마감 (다시 열기)
                   </button>
                 </form>

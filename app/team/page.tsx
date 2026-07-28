@@ -151,6 +151,8 @@ export default async function TeamPage({
                   {[
                     r.review.exceedsLegalLimit &&
                       `주 평균 52시간 초과 (${hm(r.summary.avgWeeklyMinutes)})`,
+                    r.review.staleSessionDate &&
+                      `${DateTime.fromISO(r.review.staleSessionDate, { zone }).toFormat("M월 d일")} 근무가 종료되지 않음 — 본인만 종료 시각을 넣을 수 있습니다`,
                     r.review.incomplete > 0 &&
                       `퇴근 기록 없는 날 ${r.review.incomplete}일`,
                     r.review.violations > 0 &&
@@ -294,13 +296,18 @@ export default async function TeamPage({
                 <div className="tile">
                   <div className="k">종료 안 됨</div>
                   <div className="v">{stale.length}명</div>
-                  {stale.length > 0 && (
-                    <div className="k" style={{ marginTop: 2 }}>
-                      본인이 종료 시각을 넣어야 집계됩니다
-                    </div>
-                  )}
                 </div>
               </div>
+              {/*
+                설명은 타일 안이 아니라 카드 아래 한 줄로. 타일 하나에만
+                붙이면 그 타일이 길어져서 카드 아래쪽이 텅 빈다.
+              */}
+              {stale.length > 0 && (
+                <p className="empty">
+                  종료되지 않은 근무는 본인만 종료 시각을 넣을 수 있습니다.
+                  아래 확인 필요에서 누구인지 볼 수 있습니다.
+                </p>
+              )}
             </section>
           )}
 
