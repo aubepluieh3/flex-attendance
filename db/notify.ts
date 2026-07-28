@@ -194,10 +194,24 @@ export async function syncNotifications(
 
   if (!hrUser) return { created: 0, resolved: 0 };
 
+  /*
+   * 임원에게는 개인 알림을 만들지 않는다.
+   *
+   * 임원은 근태를 찍지 않고 개인 상세도 볼 수 없다. "정산이 곧 마감됩니다"
+   * 같은 걸 받아도 할 수 있는 게 없다 — 아무 행동으로 이어지지 않는 알림은
+   * 배지 숫자만 올리고 알림함의 신뢰를 떨어뜨린다.
+   */
+  const execRows = await db
+    .select({ id: users.id })
+    .from(users)
+    .where(and(eq(users.orgId, orgId), eq(users.role, "executive")));
+  const execIds = new Set(execRows.map((r) => r.id));
+
   const drafts: Draft[] = [];
   for (const range of ranges) {
     const rows = await loadTeamRows(hrUser as Viewer, range, rules, asOf);
     for (const r of rows) {
+      if (execIds.has(r.userId)) continue;
       drafts.push(
         ...(await draftsForMember(
           { userId: r.userId, role: "member", summary: r.summary },
