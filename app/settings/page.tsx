@@ -291,15 +291,39 @@ export default async function SettingsPage({
               />
             </label>
           </div>
-          <div style={{ marginTop: 16, display: "flex", gap: 10 }}>
-            <button type="submit">저장하고 전원 재계산</button>
+          {/*
+            규칙을 바꾸면 전 직원의 과거 집계가 다시 계산된다.
+            한 번의 클릭으로 실행되면 안 된다 — 처음 쓰는 사용자로 걸어보니
+            아무 생각 없이 눌러서 전원 재계산이 즉시 돌았다.
+          */}
+          <details className="confirm" style={{ marginTop: 16 }}>
+            <summary>저장하고 전원 재계산…</summary>
+            <div className="box">
+              <span className="why">
+                구성원 {people.length}명의 과거 집계가 새 규칙으로 다시
+                계산됩니다. 마감된 기간의 공식 기록(스냅샷)은 바뀌지 않고
+                &quot;마감 후 변경&quot;으로 표시됩니다.
+              </span>
+              <button type="submit" className="danger">
+                네, 저장하고 재계산합니다
+              </button>
+            </div>
+          </details>
+        </form>
+        <details className="confirm" style={{ marginTop: 10 }}>
+          <summary>규칙은 그대로, 재계산만…</summary>
+          <div className="box">
+            <span className="why">
+              설정을 바꾸지 않고 원본 태그에서 다시 계산합니다. 늦게 들어온
+              기록을 반영할 때 씁니다.
+            </span>
+            <form action={recomputeAction} className="inline">
+              <button type="submit" className="danger">
+                네, 재계산합니다
+              </button>
+            </form>
           </div>
-        </form>
-        <form action={recomputeAction} style={{ marginTop: 10 }}>
-          <button type="submit" className="pill">
-            규칙은 그대로, 재계산만
-          </button>
-        </form>
+        </details>
       </section>
 
       <section className="card">
@@ -329,13 +353,22 @@ export default async function SettingsPage({
                   <td>{h.date}</td>
                   <td>{h.name}</td>
                   <td>
-                    <form action={removeHolidayAction}>
-                      <input type="hidden" name="id" value={h.id} />
-                      {/* 지우면 그 날의 근무 집계가 바뀐다 — 되돌리기 어려운 쪽 */}
-                      <button type="submit" className="danger">
-                        삭제
-                      </button>
-                    </form>
+                    {/* 지우면 그 날이 영업일이 되어 전 직원 소정근로가 늘어난다 */}
+                    <details className="confirm">
+                      <summary>삭제…</summary>
+                      <div className="box">
+                        <span className="why">
+                          {h.date} 이 다시 영업일이 되어 전 직원 소정근로가
+                          늘어납니다.
+                        </span>
+                        <form action={removeHolidayAction} className="inline">
+                          <input type="hidden" name="id" value={h.id} />
+                          <button type="submit" className="danger">
+                            네, 삭제합니다
+                          </button>
+                        </form>
+                      </div>
+                    </details>
                   </td>
                 </tr>
               ))}
@@ -427,7 +460,7 @@ export default async function SettingsPage({
                   <td>
                     <form action={removeTimeOffAction}>
                       <input type="hidden" name="id" value={t.id} />
-                      <button type="submit" className="danger">
+                      <button type="submit" className="pill">
                         삭제
                       </button>
                     </form>

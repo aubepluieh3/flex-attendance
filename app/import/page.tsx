@@ -99,12 +99,22 @@ export default async function ImportPage({
                         : `${b.insertedCount}건 반영 · ${b.skippedCount}건 중복 제외 · ${b.uploadedByName}`}
                     </span>
                     {!b.revokedAt && b.liveTags > 0 && (
-                      <form action={revokeBatchAction}>
-                        <input type="hidden" name="batchId" value={b.id} />
-                        <button type="submit" className="danger">
-                          무효화
-                        </button>
-                      </form>
+                      <details className="confirm">
+                        <summary>무효화…</summary>
+                        <div className="box">
+                          <span className="why">
+                            이 파일로 들어온 태그 {b.liveTags}건을 지우고 해당
+                            인원의 집계를 다시 계산합니다. 되돌릴 수 없습니다 —
+                            필요하면 파일을 다시 올려야 합니다.
+                          </span>
+                          <form action={revokeBatchAction} className="inline">
+                            <input type="hidden" name="batchId" value={b.id} />
+                            <button type="submit" className="danger">
+                              네, 무효화합니다
+                            </button>
+                          </form>
+                        </div>
+                      </details>
                     )}
                   </li>
                 ))}

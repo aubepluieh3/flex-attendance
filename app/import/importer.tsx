@@ -219,6 +219,23 @@ export function Importer({ timezone }: { timezone: string }) {
         <button type="submit" disabled={!ready || pending}>
           {pending ? "반영 중…" : "근태 기록에 반영"}
         </button>
+        {/*
+          왜 못 누르는지 말해준다.
+          처음 쓰는 사용자로 걸어보니 버튼이 흐리게 있는데 이유가 없어서
+          무엇을 더 해야 하는지 스스로 알아내야 했다.
+        */}
+        {!ready && (
+          <p className="empty" style={{ marginTop: 10 }}>
+            아직 누를 수 없습니다 —{" "}
+            {!table
+              ? "먼저 CSV 파일을 선택하세요."
+              : !effective.employeeNo
+                ? "위에서 사번 컬럼을 지정하세요."
+                : split
+                  ? "날짜 컬럼과 시각 컬럼을 둘 다 지정하세요."
+                  : "일시 컬럼을 지정하세요. 날짜와 시각이 나뉘어 있으면 위 체크를 켜세요."}
+          </p>
+        )}
         <p className="empty" style={{ marginTop: 10 }}>
           이미 있는 태그는 다시 넣지 않습니다. 같은 파일을 두 번 올려도
           안전합니다.

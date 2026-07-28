@@ -214,44 +214,79 @@ export function PeopleManager({
                           비밀번호는 내 계정에서 변경
                         </span>
                       ) : (
-                        <form action={action} className="inline">
-                          <input type="hidden" name="op" value="reset" />
-                          <input type="hidden" name="userId" value={p.id} />
-                          <input type="hidden" name="name" value={p.name} />
-                          <input
-                            type="hidden"
-                            name="employeeNo"
-                            value={p.employeeNo}
-                          />
-                          {/* 누르면 그 사람의 기존 비밀번호가 즉시 못 쓰게 된다 */}
-                          <button
-                            type="submit"
-                            className="danger"
-                            disabled={pending}
-                          >
-                            비밀번호 초기화
-                          </button>
-                        </form>
+                        <details className="confirm">
+                          <summary>비밀번호 초기화…</summary>
+                          <div className="box">
+                            <span className="why">
+                              {p.name} 의 기존 비밀번호가 즉시 못 쓰게 되고
+                              로그인도 모두 끊깁니다. 임시 비밀번호는{" "}
+                              <b>이 화면에 한 번만</b> 보이니 바로 전달해야
+                              합니다.
+                            </span>
+                            <form action={action} className="inline">
+                              <input type="hidden" name="op" value="reset" />
+                              <input type="hidden" name="userId" value={p.id} />
+                              <input type="hidden" name="name" value={p.name} />
+                              <input
+                                type="hidden"
+                                name="employeeNo"
+                                value={p.employeeNo}
+                              />
+                              <button
+                                type="submit"
+                                className="danger"
+                                disabled={pending}
+                              >
+                                네, 초기화합니다
+                              </button>
+                            </form>
+                          </div>
+                        </details>
                       )}
-                      {p.id !== viewerId && (
-                        <form action={action} className="inline">
-                          <input type="hidden" name="op" value="active" />
-                          <input type="hidden" name="userId" value={p.id} />
-                          <input
-                            type="hidden"
-                            name="active"
-                            value={p.active ? "0" : "1"}
-                          />
-                          {/* 비활성화는 로그인을 막는다. 되살리는 건 그냥 부차 행동 */}
-                          <button
-                            type="submit"
-                            className={p.active ? "danger" : "pill"}
-                            disabled={pending}
-                          >
-                            {p.active ? "비활성화" : "활성화"}
-                          </button>
-                        </form>
-                      )}
+                      {p.id !== viewerId &&
+                        (p.active ? (
+                          /*
+                            비활성화는 그 사람을 그 순간 쫓아낸다.
+                            한 번의 클릭으로 실행되면 안 된다 — 걷다가
+                            실수로 눌러서 실제로 쫓아냈다.
+                          */
+                          <details className="confirm">
+                            <summary>비활성화…</summary>
+                            <div className="box">
+                              <span className="why">
+                                {p.name}({p.employeeNo}) 은 즉시 로그인할 수
+                                없게 되고 열려 있는 세션도 끊깁니다. 근무 기록은
+                                지워지지 않습니다.
+                              </span>
+                              <form action={action} className="inline">
+                                <input type="hidden" name="op" value="active" />
+                                <input type="hidden" name="userId" value={p.id} />
+                                <input type="hidden" name="active" value="0" />
+                                <button
+                                  type="submit"
+                                  className="danger"
+                                  disabled={pending}
+                                >
+                                  네, 비활성화합니다
+                                </button>
+                              </form>
+                            </div>
+                          </details>
+                        ) : (
+                          <form action={action} className="inline">
+                            <input type="hidden" name="op" value="active" />
+                            <input type="hidden" name="userId" value={p.id} />
+                            <input type="hidden" name="active" value="1" />
+                            {/* 되살리는 건 부차 행동이라 확인이 필요 없다 */}
+                            <button
+                              type="submit"
+                              className="pill"
+                              disabled={pending}
+                            >
+                              활성화
+                            </button>
+                          </form>
+                        ))}
                     </div>
                   </td>
                 </tr>
