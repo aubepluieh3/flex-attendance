@@ -5,7 +5,8 @@ import { holidays, orgs, timeOff, users, workDays } from "./schema";
 import { AccessDenied, loadOrgRules, type Viewer } from "./access";
 import { deductFor } from "./timeoff";
 import { recomputeWorkDays } from "./recompute";
-import { isPeriodClosed } from "./close";
+import { assertPeriodOpen } from "./close";
+import { assertDate } from "@/lib/date";
 import { resolvePeriod } from "@/lib/attendance/period";
 import type { BreakRule } from "@/lib/attendance/types";
 import { now } from "@/lib/clock";
@@ -45,14 +46,6 @@ const toMinutes = (hhmm: string) => {
  * 형식만 검사하면 "2026-13-99" 가 통과해서 Postgres 에러가 사용자에게
  * 그대로 노출된다.
  */
-function assertDate(value: string, label: string): string {
-  const text = value.trim();
-  if (!DateTime.fromISO(text).isValid || !/^\d{4}-\d{2}-\d{2}$/.test(text)) {
-    throw new Error(`${label}가 올바른 날짜가 아닙니다: "${text}"`);
-  }
-  return text;
-}
-
 export type OrgRulesInput = {
   settlementPeriod: "week" | "month";
   weekStartDay: number;
@@ -288,16 +281,7 @@ export async function addTimeOff(
   const day = assertDate(input.date, "휴가 날짜");
 
   const rules = await loadOrgRules(viewer.orgId);
-  const range = resolvePeriod(day, {
-    kind: rules.settlementKind,
-    weekStartDay: rules.weekStartDay,
-    timezone: rules.attendance.timezone,
-  });
-  if (await isPeriodClosed(viewer.orgId, range)) {
-    throw new AccessDenied(
-      `${range.start} ~ ${range.end} 정산기간은 마감되어 휴가를 등록할 수 없습니다.`,
-    );
-  }
+  await assertPeriodOpen(viewer.orgId, day, rules, "휴가를 등록할");
 
   const [target] = await db
     .select({ id: users.id })

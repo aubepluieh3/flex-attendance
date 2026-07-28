@@ -494,3 +494,30 @@ export async function isPeriodClosed(
     );
   return period?.status === "closed";
 }
+
+/**
+ * 그 날짜가 속한 정산기간이 열려 있는지 확인하고, 닫혀 있으면 던진다.
+ *
+ * 예전에는 adjust·checkin·timeoff·settings 가 각자 같은 검사를 갖고 있었다.
+ * 이름이 assertPeriodOpen / assertOpenPeriod 로 갈리고 문구가 넷 다 달랐다.
+ * 유예 규칙이나 문구를 바꿀 때 네 곳을 찾아야 했다.
+ *
+ * @param action "보정할" 처럼 무엇을 못 하는지. 메시지에 그대로 들어간다.
+ */
+export async function assertPeriodOpen(
+  orgId: string,
+  date: string,
+  rules: OrgRules,
+  action: string,
+): Promise<void> {
+  const range = resolvePeriod(date, {
+    kind: rules.settlementKind,
+    weekStartDay: rules.weekStartDay,
+    timezone: rules.attendance.timezone,
+  });
+  if (await isPeriodClosed(orgId, range)) {
+    throw new AccessDenied(
+      `${range.start} ~ ${range.end} 정산기간은 마감되어 ${action} 수 없습니다. 고쳐야 할 게 있으면 HR에 재마감을 요청하세요.`,
+    );
+  }
+}

@@ -2,10 +2,16 @@ import { and, asc, desc, eq, gte, inArray, lte, ne } from "drizzle-orm";
 import { DateTime } from "luxon";
 import { db } from "./client";
 import { teams, timeOff, users } from "./schema";
-import { AccessDenied, loadOrgRules, type OrgRules, type Viewer } from "./access";
-import { isPeriodClosed } from "./close";
-import { resolvePeriod } from "@/lib/attendance/period";
+import {
+  AccessDenied,
+  loadOrgRules,
+  teamScope,
+  type Viewer,
+} from "./access";
+import { assertPeriodOpen } from "./close";
+import { assertDate } from "@/lib/date";
 import { now } from "@/lib/clock";
+import { TIME_OFF_LABEL as KIND_LABEL } from "@/lib/format";
 
 /**
  * 휴가 신청 / 승인.
@@ -43,21 +49,6 @@ export type TimeOffRow = {
   createdAt: Date;
 };
 
-const KIND_LABEL: Record<TimeOffKind, string> = {
-  full: "연차",
-  half_am: "오전 반차",
-  half_pm: "오후 반차",
-  unpaid: "무급휴가",
-};
-
-/** YYYY-MM-DD 검증. 형식만 보면 2026-02-30 이 통과한다 */
-function assertDate(value: string, label: string): string {
-  const v = value.trim();
-  const dt = DateTime.fromFormat(v, "yyyy-MM-dd", { zone: "Asia/Seoul" });
-  if (!dt.isValid) throw new Error(`${label}가 올바르지 않습니다: ${value}`);
-  return dt.toISODate()!;
-}
-
 /**
  * 차감량은 스냅샷이다.
  * 나중에 1일 소정근로가 바뀌어도 과거 휴가는 흔들리면 안 된다.
@@ -66,47 +57,6 @@ export function deductFor(kind: TimeOffKind, standardMinutesPerDay: number) {
   return kind === "half_am" || kind === "half_pm"
     ? Math.round(standardMinutesPerDay / 2)
     : standardMinutesPerDay;
-}
-
-async function assertPeriodOpen(rules: OrgRules, date: string) {
-  const range = resolvePeriod(date, {
-    kind: rules.settlementKind,
-    weekStartDay: rules.weekStartDay,
-    timezone: rules.attendance.timezone,
-  });
-  if (await isPeriodClosed(rules.orgId, range)) {
-    throw new AccessDenied(
-      `${range.start} ~ ${range.end} 정산기간은 마감되어 휴가를 바꿀 수 없습니다.`,
-    );
-  }
-}
-
-/** 팀 하위 트리 (자기 팀 포함) */
-async function teamScope(viewer: Viewer): Promise<Set<string>> {
-  const scope = new Set<string>();
-  if (!viewer.teamId) return scope;
-
-  const rows = await db
-    .select({ id: teams.id, parentId: teams.parentId })
-    .from(teams)
-    .where(eq(teams.orgId, viewer.orgId));
-
-  const children = new Map<string, string[]>();
-  for (const r of rows) {
-    if (!r.parentId) continue;
-    const list = children.get(r.parentId);
-    if (list) list.push(r.id);
-    else children.set(r.parentId, [r.id]);
-  }
-
-  const queue = [viewer.teamId];
-  while (queue.length > 0) {
-    const id = queue.pop()!;
-    if (scope.has(id)) continue;
-    scope.add(id);
-    queue.push(...(children.get(id) ?? []));
-  }
-  return scope;
 }
 
 /**
@@ -151,7 +101,7 @@ export async function requestTimeOff(
 ): Promise<{ date: string; kind: TimeOffKind }> {
   const day = assertDate(input.date, "휴가 날짜");
   const rules = await loadOrgRules(viewer.orgId);
-  await assertPeriodOpen(rules, day);
+  await assertPeriodOpen(viewer.orgId, day, rules, "휴가를 신청할");
 
   const reason = input.reason.trim();
   if (reason.length === 0) {
@@ -226,7 +176,7 @@ export async function decideTimeOff(
   }
 
   const rules = await loadOrgRules(viewer.orgId);
-  await assertPeriodOpen(rules, row.date);
+  await assertPeriodOpen(viewer.orgId, row.date, rules, "휴가를 승인·반려할");
 
   await db
     .update(timeOff)
@@ -293,7 +243,7 @@ export async function cancelTimeOff(
   }
 
   const rules = await loadOrgRules(viewer.orgId);
-  await assertPeriodOpen(rules, row.date);
+  await assertPeriodOpen(viewer.orgId, row.date, rules, "휴가를 취소할");
 
   await db.delete(timeOff).where(eq(timeOff.id, id));
   return { date: row.date, wasApproved: row.status === "approved" };

@@ -1,8 +1,7 @@
 import Link from "next/link";
 import { DateTime } from "luxon";
 import { shiftPeriod, type PeriodKind, type PeriodRange } from "@/lib/attendance/period";
-
-const WEEKDAY = ["월", "화", "수", "목", "금", "토", "일"];
+import { dowOf } from "@/lib/format";
 
 /**
  * 정산기간 앞뒤 이동.
@@ -43,12 +42,12 @@ export function PeriodNav({
         화면보다 넓어져서 뒤에 붙는 글자("· 구성원 3명")가 밖으로 밀려 나간다.
       */}
       <span className="wide">
-        {from.toFormat("yyyy년 M월 d일")}({WEEKDAY[from.weekday - 1]}) ~{" "}
-        {to.toFormat("M월 d일")}({WEEKDAY[to.weekday - 1]})
+        {from.toFormat("yyyy년 M월 d일")}({dowOf(from.weekday)}) ~{" "}
+        {to.toFormat("M월 d일")}({dowOf(to.weekday)})
       </span>
       <span className="narrow">
-        {from.toFormat("M/d")}({WEEKDAY[from.weekday - 1]}) ~{" "}
-        {to.toFormat("M/d")}({WEEKDAY[to.weekday - 1]})
+        {from.toFormat("M/d")}({dowOf(from.weekday)}) ~{" "}
+        {to.toFormat("M/d")}({dowOf(to.weekday)})
       </span>
       {link(next, "다음 →")}
       {!isCurrent && <Link href={basePath}>이번 기간으로</Link>}

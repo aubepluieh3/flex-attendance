@@ -11,7 +11,7 @@ import {
 } from "@/db/people";
 import type { Role } from "@/db/access";
 import { requestViewer } from "../viewer";
-import { rethrowControlFlow } from "../action-error";
+import { rethrowControlFlow, str } from "../action-error";
 
 /**
  * 사용자 관리 액션을 하나로 모은다.
@@ -28,7 +28,6 @@ export type PeopleState = {
   secret?: { name: string; employeeNo: string; password: string };
 };
 
-const str = (f: FormData, k: string) => String(f.get(k) ?? "");
 const asRole = (v: string): Role =>
   v === "manager" || v === "hr" || v === "executive" ? v : "member";
 

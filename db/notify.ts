@@ -5,7 +5,7 @@ import { notifications, teams, timeOff, users } from "./schema";
 import { loadOrgRules, type OrgRules, type Viewer } from "./access";
 import { isPeriodClosed, loadPeriodState } from "./close";
 import { loadTeamRows } from "./team";
-import { listPendingFor, TIME_OFF_LABEL } from "./timeoff";
+import { listPendingFor } from "./timeoff";
 import {
   resolvePeriod,
   shiftPeriod,
@@ -13,6 +13,7 @@ import {
 } from "@/lib/attendance/period";
 import { computePeriodSummary, isClosable } from "@/lib/attendance/settle";
 import { now } from "@/lib/clock";
+import { hm, md, TIME_OFF_LABEL } from "@/lib/format";
 
 /**
  * 알림 동기화.
@@ -41,18 +42,6 @@ type Draft = {
   href: string;
   /** 정산기간과 무관한 알림(휴가 승인 등)은 null */
   periodStart: string | null;
-};
-
-const md = (date: string, zone: string) =>
-  DateTime.fromISO(date, { zone }).toFormat("M월 d일");
-
-const hm = (minutes: number) => {
-  const abs = Math.abs(Math.round(minutes));
-  const h = Math.floor(abs / 60);
-  const m = abs % 60;
-  if (h === 0) return `${m}분`;
-  if (m === 0) return `${h}시간`;
-  return `${h}시간 ${m}분`;
 };
 
 /** 한 사람의 현재 상태에서 필요한 알림을 뽑는다 */

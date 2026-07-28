@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { DateTime } from "luxon";
 import { startWorkAction, stopWorkAction } from "./work-actions";
+import { hm } from "@/lib/format";
 
 /**
  * 오늘 카드 — 앱을 여는 이유.
@@ -27,15 +28,6 @@ export type TodayView = {
   /** 지난 날 종료를 깜빡한 근무. 있으면 새 근무를 시작할 수 없다. */
   dangling: { workDate: string; startedAt: Date } | null;
   zone: string;
-};
-
-const hm = (minutes: number) => {
-  const abs = Math.abs(Math.round(minutes));
-  const h = Math.floor(abs / 60);
-  const m = abs % 60;
-  if (h === 0) return `${m}분`;
-  if (m === 0) return `${h}시간`;
-  return `${h}시간 ${m}분`;
 };
 
 export function TodayCard({ view }: { view: TodayView }) {

@@ -11,8 +11,8 @@ import {
 } from "@/lib/csv";
 import type { ImportReport } from "@/lib/import-types";
 import { importAction, type ImportState } from "./actions";
+import { dowOf } from "@/lib/format";
 
-const WEEKDAY = ["월", "화", "수", "목", "금", "토", "일"];
 const PREVIEW_ROWS = 8;
 
 type Mapping = Partial<ColumnMapping>;
@@ -78,7 +78,7 @@ export function Importer({ timezone }: { timezone: string }) {
 
   const showTime = (d: Date) => {
     const dt = DateTime.fromJSDate(d, { zone: timezone });
-    return `${dt.toFormat("yyyy년 M월 d일")} (${WEEKDAY[dt.weekday - 1]}) ${dt.toFormat("HH:mm")}`;
+    return `${dt.toFormat("yyyy년 M월 d일")} (${dowOf(dt.weekday)}) ${dt.toFormat("HH:mm")}`;
   };
 
   return (

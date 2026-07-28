@@ -14,3 +14,14 @@ export function rethrowControlFlow(e: unknown): void {
     throw e;
   }
 }
+
+/** FormData 문자열 읽기. 액션 파일 네 곳이 각자 갖고 있었다. */
+export const str = (form: FormData, key: string) =>
+  String(form.get(key) ?? "");
+
+/** FormData 숫자 읽기 */
+export function num(form: FormData, key: string, fallback = 0): number {
+  const raw = str(form, key).trim();
+  const n = Number(raw);
+  return raw === "" || Number.isNaN(n) ? fallback : n;
+}

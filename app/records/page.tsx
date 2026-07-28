@@ -11,48 +11,16 @@ import { now } from "@/lib/clock";
 import { requestViewer } from "../viewer";
 import { recordsAction } from "./actions";
 import { PeriodNav } from "../period-nav";
+import {
+  ADJUST_KIND_LABEL as KIND_LABEL,
+  dowOf,
+  FLAG_LABEL,
+  hm,
+  SESSION_SOURCE_LABEL as SOURCE_LABEL,
+  TIME_OFF_LABEL as OFF_LABEL,
+} from "@/lib/format";
 
 export const dynamic = "force-dynamic";
-
-const WEEKDAY = ["월", "화", "수", "목", "금", "토", "일"];
-
-const FLAG_LABEL: Record<DayFlag, string> = {
-  core_time_violation: "의무근로시간대 미준수",
-  outside_flex_band: "선택시간대 밖 근무",
-  over_daily_limit: "1일 상한 초과",
-  zero_stay: "태그 중복 인식",
-  holiday_work: "휴일 근무",
-};
-
-const SOURCE_LABEL = {
-  app: "앱에서 시작",
-  badge: "사원증 기록",
-  import: "가져온 기록",
-  manual: "직접 입력",
-} as const;
-
-const OFF_LABEL = {
-  full: "연차",
-  half_am: "오전 반차",
-  half_pm: "오후 반차",
-  unpaid: "무급휴가",
-} as const;
-
-const KIND_LABEL = {
-  missing_tag: "시각 보정",
-  field_work: "외근·출장",
-  correction: "정정",
-  revert: "보정 취소",
-} as const;
-
-function hm(minutes: number): string {
-  const abs = Math.abs(Math.round(minutes));
-  const h = Math.floor(abs / 60);
-  const m = abs % 60;
-  if (h === 0) return `${m}분`;
-  if (m === 0) return `${h}시간`;
-  return `${h}시간 ${m}분`;
-}
 
 export default async function RecordsPage({
   searchParams,
@@ -138,7 +106,6 @@ export default async function RecordsPage({
     estimates.set(d.workDate, await estimateFor(viewer.id, d.workDate, rules));
   }
 
-
   return (
     <main className="page">
       <div className="head">
@@ -197,7 +164,7 @@ export default async function RecordsPage({
       {dates.map((date) => {
         const day = byDate.get(date);
         const dt = DateTime.fromISO(date, { zone });
-        const dow = WEEKDAY[dt.weekday - 1];
+        const dow = dowOf(dt.weekday);
         // 승인된 휴가(off)가 없으면 대기 중인 신청이라도 보여준다
         const approvedOff = off.get(date);
         const dayOff = approvedOff ?? offAll.get(date);

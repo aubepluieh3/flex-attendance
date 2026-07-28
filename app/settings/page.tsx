@@ -13,15 +13,9 @@ import {
   removeTimeOffAction,
   saveRulesAction,
 } from "./actions";
+import { TIME_OFF_LABEL as KIND_LABEL } from "@/lib/format";
 
 export const dynamic = "force-dynamic";
-
-const KIND_LABEL = {
-  full: "연차",
-  half_am: "오전 반차",
-  half_pm: "오후 반차",
-  unpaid: "무급",
-} as const;
 
 const hours = (minutes: number) => Math.round((minutes / 60) * 100) / 100;
 

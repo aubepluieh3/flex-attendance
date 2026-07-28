@@ -1,7 +1,15 @@
 import { DateTime } from "luxon";
 import { computePeriodSummary } from "@/lib/attendance/settle";
 import { resolvePeriod } from "@/lib/attendance/period";
-import type { ComputedDay, DayFlag } from "@/lib/attendance/types";
+import type { ComputedDay } from "@/lib/attendance/types";
+import {
+  clock,
+  dateLabel,
+  eachDate,
+  FLAG_LABEL,
+  hm,
+  TIME_OFF_LABEL as OFF_LABEL,
+} from "@/lib/format";
 import { isFixedClock, now } from "@/lib/clock";
 import { loadOrgRules, loadTimeOff, loadWorkDays } from "@/db/access";
 import { loadPeriodState } from "@/db/close";
@@ -22,8 +30,6 @@ export const dynamic = "force-dynamic";
 const SCALE_MINUTES = 10 * 60;
 const REFERENCE_MINUTES = 8 * 60;
 
-const WEEKDAY = ["월", "화", "수", "목", "금", "토", "일"];
-
 const SNAPSHOT_LABEL = {
   targetMinutes: "소정근로",
   workedMinutes: "실근무",
@@ -33,49 +39,7 @@ const SNAPSHOT_LABEL = {
   avgWeeklyMinutes: "주평균",
 } as const;
 
-const FLAG_LABEL: Record<DayFlag, string> = {
-  core_time_violation: "의무근로시간대 미준수",
-  outside_flex_band: "선택시간대 밖 근무",
-  over_daily_limit: "1일 상한 초과",
-  zero_stay: "태그 중복 인식",
-  holiday_work: "휴일 근무",
-};
-
-const OFF_LABEL = {
-  full: "연차",
-  half_am: "오전 반차",
-  half_pm: "오후 반차",
-  unpaid: "무급휴가",
-} as const;
-
-function hm(minutes: number): string {
-  const sign = minutes < 0 ? "-" : "";
-  const abs = Math.abs(Math.round(minutes));
-  const h = Math.floor(abs / 60);
-  const m = abs % 60;
-  if (h === 0) return `${sign}${m}분`;
-  if (m === 0) return `${sign}${h}시간`;
-  return `${sign}${h}시간 ${m}분`;
-}
-
-const clock = (date: Date | null, zone: string) =>
-  date ? DateTime.fromJSDate(date, { zone }).toFormat("HH:mm") : null;
-
-function eachDate(start: string, end: string, zone: string): string[] {
-  const out: string[] = [];
-  let cursor = DateTime.fromISO(start, { zone });
-  const last = DateTime.fromISO(end, { zone });
-  while (cursor <= last) {
-    out.push(cursor.toISODate()!);
-    cursor = cursor.plus({ days: 1 });
-  }
-  return out;
-}
-
-const label = (date: string, zone: string) => {
-  const dt = DateTime.fromISO(date, { zone });
-  return { md: dt.toFormat("M/d"), dow: WEEKDAY[dt.weekday - 1] };
-};
+const label = dateLabel;
 
 export default async function Page({
   searchParams,

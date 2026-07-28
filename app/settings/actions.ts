@@ -13,7 +13,7 @@ import {
 import { closeDueIfStale } from "@/db/close";
 import { now } from "@/lib/clock";
 import { requestViewer } from "../viewer";
-import { rethrowControlFlow } from "../action-error";
+import { num, rethrowControlFlow, str } from "../action-error";
 
 /**
  * 설정 액션.
@@ -23,12 +23,6 @@ import { rethrowControlFlow } from "../action-error";
  * 클라이언트 컴포넌트가 된다. 그래서 결과를 쿼리 파라미터로 돌려주고 페이지가
  * 배너로 보여준다 — JS 없이도 동작한다.
  */
-const num = (form: FormData, key: string, fallback = 0) => {
-  const raw = String(form.get(key) ?? "").trim();
-  const n = Number(raw);
-  return raw === "" || Number.isNaN(n) ? fallback : n;
-};
-const str = (form: FormData, key: string) => String(form.get(key) ?? "");
 
 async function done(
   fn: (viewer: Awaited<ReturnType<typeof requestViewer>>) => Promise<string>,

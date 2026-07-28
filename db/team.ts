@@ -1,7 +1,12 @@
 import { and, asc, eq, gte, inArray, lte, ne } from "drizzle-orm";
 import { db } from "./client";
 import { accessLogs, dayAdjustments, teams, timeOff, users, workDays } from "./schema";
-import { AccessDenied, loadOrgRules, type OrgRules, type Viewer } from "./access";
+import {
+  AccessDenied,
+  teamScope,
+  type OrgRules,
+  type Viewer,
+} from "./access";
 import { openSessionsForUsers } from "./checkin";
 import { computePeriodSummary, type PeriodSummary } from "@/lib/attendance/settle";
 import { resolveWorkDate } from "@/lib/attendance/compute";
@@ -71,28 +76,7 @@ async function visibleUserIds(
     throw new AccessDenied("팀 현황은 팀장 이상만 볼 수 있습니다.");
   }
 
-  // 팀 하위 트리
-  const teamRows = await db
-    .select({ id: teams.id, parentId: teams.parentId })
-    .from(teams)
-    .where(eq(teams.orgId, rulesOrgId));
-
-  const children = new Map<string, string[]>();
-  for (const t of teamRows) {
-    if (!t.parentId) continue;
-    const list = children.get(t.parentId);
-    if (list) list.push(t.id);
-    else children.set(t.parentId, [t.id]);
-  }
-
-  const scope = new Set<string>();
-  const queue = [viewer.teamId];
-  while (queue.length > 0) {
-    const id = queue.pop()!;
-    if (scope.has(id)) continue;
-    scope.add(id);
-    queue.push(...(children.get(id) ?? []));
-  }
+  const scope = await teamScope(viewer);
 
   const rows = await db
     .select({ id: users.id })

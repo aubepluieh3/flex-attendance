@@ -8,19 +8,9 @@ import { resolvePeriod } from "@/lib/attendance/period";
 import { now } from "@/lib/clock";
 import { requestViewer } from "../viewer";
 import { PeriodNav } from "../period-nav";
+import { hm } from "@/lib/format";
 
 export const dynamic = "force-dynamic";
-
-const WEEKDAY = ["월", "화", "수", "목", "금", "토", "일"];
-
-function hm(minutes: number): string {
-  const abs = Math.abs(Math.round(minutes));
-  const h = Math.floor(abs / 60);
-  const m = abs % 60;
-  if (h === 0) return `${m}분`;
-  if (m === 0) return `${h}시간`;
-  return `${h}시간 ${m}분`;
-}
 
 export default async function TeamPage({
   searchParams,

@@ -7,8 +7,8 @@ import { recomputeWorkDays } from "./recompute";
 import { syncNotifications } from "./notify";
 import { resolveWorkDate } from "@/lib/attendance/compute";
 import { sessionsFromTags } from "@/lib/attendance/sessions";
-import { resolvePeriod } from "@/lib/attendance/period";
-import { isPeriodClosed } from "./close";
+import { assertPeriodOpen } from "./close";
+import { assertHhmm } from "@/lib/date";
 import { now } from "@/lib/clock";
 
 /**
@@ -132,24 +132,11 @@ export async function sessionsByDate(
   return byDate;
 }
 
-async function assertOpenPeriod(orgId: string, workDate: string, rules: Awaited<ReturnType<typeof loadOrgRules>>) {
-  const range = resolvePeriod(workDate, {
-    kind: rules.settlementKind,
-    weekStartDay: rules.weekStartDay,
-    timezone: rules.attendance.timezone,
-  });
-  if (await isPeriodClosed(orgId, range)) {
-    throw new AccessDenied(
-      `${range.start} ~ ${range.end} 정산기간은 마감되어 기록할 수 없습니다.`,
-    );
-  }
-}
-
 export async function startWork(viewer: Viewer): Promise<{ startedAt: Date }> {
   const rules = await loadOrgRules(viewer.orgId);
   const at = now();
   const workDate = resolveWorkDate(at, rules.attendance);
-  await assertOpenPeriod(viewer.orgId, workDate, rules);
+  await assertPeriodOpen(viewer.orgId, workDate, rules, "근무를 시작할");
 
   // 같은 사람의 동시 요청을 직렬화한다. 안 하면 열린 세션이 두 개 생긴다.
   const started = await db.transaction(async (tx) => {
@@ -196,7 +183,7 @@ export async function stopWork(
 
   const open = await openSessionOf(viewer.id);
   if (!open) throw new Error("근무 중이 아닙니다. 먼저 근무를 시작해 주세요.");
-  await assertOpenPeriod(viewer.orgId, open.workDate, rules);
+  await assertPeriodOpen(viewer.orgId, open.workDate, rules, "근무를 종료할");
 
   if (at.getTime() <= open.startedAt.getTime()) {
     throw new Error("종료 시각이 시작 시각보다 이릅니다.");
@@ -263,9 +250,8 @@ export async function closeSessionManually(
   if (note.length === 0) {
     throw new Error("종료 시각을 직접 넣을 때는 사유가 필요합니다.");
   }
-  if (!/^\d{2}:\d{2}$/.test(opts.endedAt)) {
-    throw new Error("종료 시각을 HH:MM 형식으로 넣어 주세요.");
-  }
+  // 전에는 \d{2}:\d{2} 라 "99:99" 가 통과해서 뒤에서 Luxon 이 던졌다
+  const endedHhmm = assertHhmm(opts.endedAt, "종료 시각");
 
   const [row] = await db
     .select({
@@ -291,10 +277,10 @@ export async function closeSessionManually(
       "오늘 진행 중인 근무는 '근무 종료' 버튼으로 끝내 주세요.",
     );
   }
-  await assertOpenPeriod(viewer.orgId, row.workDate, rules);
+  await assertPeriodOpen(viewer.orgId, row.workDate, rules, "근무를 종료할");
 
   // 새벽 2시 퇴근처럼 종료가 시작보다 이르면 다음 날로 넘긴다 (보정 화면과 같은 규칙)
-  let endedAt = DateTime.fromISO(`${row.workDate}T${opts.endedAt}`, { zone });
+  let endedAt = DateTime.fromISO(`${row.workDate}T${endedHhmm}`, { zone });
   if (!endedAt.isValid) throw new Error("종료 시각을 읽을 수 없습니다.");
   if (endedAt.toMillis() <= row.startedAt.getTime()) {
     endedAt = endedAt.plus({ days: 1 });

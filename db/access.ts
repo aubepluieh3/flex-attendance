@@ -139,8 +139,14 @@ export async function loadOrgRules(orgId: string): Promise<OrgRules> {
   };
 }
 
-/** 팀 하위 트리 (자기 팀 포함) */
-async function teamScope(viewer: Viewer): Promise<Set<string>> {
+/**
+ * 팀 하위 트리 (자기 팀 포함).
+ *
+ * 권한 판정의 재료이므로 이 파일에만 둔다. 예전에 db/timeoff.ts 와 db/team.ts
+ * 가 각자 복사해 갖고 있었는데, 그러면 조직 트리 규칙이 바뀔 때 조회 권한과
+ * 승인 권한이 조용히 갈라진다.
+ */
+export async function teamScope(viewer: Viewer): Promise<Set<string>> {
   if (!viewer.teamId) return new Set();
 
   const rows = await db

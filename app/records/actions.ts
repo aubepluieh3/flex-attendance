@@ -14,7 +14,7 @@ import { syncNotifications } from "@/db/notify";
 import { closeDueIfStale } from "@/db/close";
 import { now } from "@/lib/clock";
 import { requestViewer } from "../viewer";
-import { rethrowControlFlow } from "../action-error";
+import { rethrowControlFlow, str } from "../action-error";
 
 /**
  * 보정 액션.
@@ -25,7 +25,6 @@ import { rethrowControlFlow } from "../action-error";
  * useActionState 를 쓰지 않는 이유: 그러면 폼이 클라이언트 컴포넌트가 되어
  * JS 없이는 제출이 안 된다. 근태 보정은 JS 없이도 되어야 한다.
  */
-const str = (f: FormData, k: string) => String(f.get(k) ?? "");
 
 export async function recordsAction(form: FormData) {
   const period = str(form, "period");
