@@ -808,6 +808,16 @@ td a {
   background: var(--crit-soft);
   color: var(--crit-ink);
 }
+/*
+ * 개수만 말하는 배지. 색은 심각도를 말하므로 개수에는 색을 쓰지 않는다.
+ * 확인할 항목이 며칠 남아 있는 게 정상인데 늘 빨갛게 칠하면 압박만 된다.
+ */
+.badge.plain {
+  background: var(--surface-2);
+  border: 1px solid var(--line-strong);
+  color: var(--ink-2);
+  font-weight: 650;
+}
 
 /*
  * ── 폼 ──

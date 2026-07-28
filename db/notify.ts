@@ -67,6 +67,15 @@ async function draftsForMember(
   const out: Draft[] = [];
   const s = member.summary;
   const base = { userId: member.userId, periodStart: range.start };
+  /*
+   * 링크에 기간을 붙인다.
+   *
+   * 지난 기간의 항목인데 href 가 "/records" 면 이번 기간 화면에 떨어져서
+   * 그 날이 목록에 없다. 알림을 눌러도 아무것도 못 보는 상태가 된다.
+   * period 는 그 기간 안의 아무 날짜여도 화면이 기간을 되찾는다.
+   */
+  const at = (path: string, anchor?: string) =>
+    `${path}?period=${range.start}${anchor ? `#${anchor}` : ""}`;
 
   for (const date of s.incompleteDates) {
     out.push({
@@ -75,7 +84,8 @@ async function draftsForMember(
       dedupeKey: `incomplete:${date}`,
       title: `${md(date, zone)} 퇴근 기록이 없습니다`,
       body: "출근 기록만 있어 집계에서 빠져 있습니다. 퇴근 시각을 보정해 주세요.",
-      href: "/records",
+      // 그 날 카드까지 내려간다
+      href: at("/records", date),
     });
   }
 
@@ -87,7 +97,7 @@ async function draftsForMember(
       dedupeKey: `violation:${range.start}:${s.flaggedDates.map((f) => f.date).join(",")}`,
       title: `규정 확인이 필요한 날이 ${s.flaggedDates.length}일 있습니다`,
       body: `${dates}. 의무근로시간대나 1일 상한을 확인해 주세요.`,
-      href: "/records",
+      href: at("/records", s.flaggedDates[0].date),
     });
   }
 
@@ -98,7 +108,7 @@ async function draftsForMember(
       dedupeKey: `legal:${range.start}`,
       title: `주 평균 ${hm(s.avgWeeklyMinutes)} — 법정 한도 초과`,
       body: "남은 기간 근무를 줄이고 팀장과 조정하세요.",
-      href: "/",
+      href: at("/"),
     });
   }
 
@@ -119,7 +129,7 @@ async function draftsForMember(
       dedupeKey: `closing:${range.start}`,
       title: `${md(range.start, zone)}~${md(range.end, zone)} 정산이 곧 마감됩니다`,
       body: `소정근로까지 ${hm(s.remainingMinutes)} 부족합니다. 빠진 기록이 있으면 지금 보정해 주세요.`,
-      href: "/records",
+      href: at("/records"),
     });
   }
 
@@ -131,7 +141,7 @@ async function draftsForMember(
       dedupeKey: `postclose:${range.start}`,
       title: "마감 후 근무 기록이 바뀌었습니다",
       body: "공식 기록은 마감 시점 값입니다. 반영이 필요하면 HR에 재마감을 요청하세요.",
-      href: "/",
+      href: at("/"),
     });
   }
 
@@ -254,7 +264,8 @@ export async function syncNotifications(
           .slice(0, 3)
           .map((r) => `${r.name} ${r.review.total}건`)
           .join(" · "),
-        href: "/team",
+        // 지난 기간 팀원 항목인데 이번 기간 화면으로 보내면 확인할 게 안 보인다
+        href: `/team?period=${range.start}`,
         periodStart: range.start,
       });
     }
@@ -337,7 +348,8 @@ export async function syncNotifications(
       body: approved
         ? "소정근로에서 빠집니다."
         : r.decisionNote || "사유가 적혀 있지 않습니다.",
-      href: "/records",
+      // 그 날짜를 period 로 넘기면 화면이 해당 정산기간을 되찾는다
+      href: `/records?period=${r.date}`,
       periodStart: null,
     });
   }
@@ -366,17 +378,34 @@ export async function syncNotifications(
     );
   }
 
-  let created = 0;
+  /*
+   * 이미 있는 건은 내용을 덮어쓴다.
+   *
+   * onConflictDoNothing 이면 문구나 링크를 고쳐도 이미 만들어진 알림에는
+   * 영원히 반영되지 않는다. dedupeKey 는 "같은 사유"를 뜻하므로, 같은 사유의
+   * 표현이 바뀌었으면 갱신되는 게 맞다. createdAt 은 건드리지 않는다 —
+   * 언제 처음 생긴 항목인지가 사용자에게는 정보다.
+   */
+  let touched = 0;
   if (drafts.length > 0) {
-    const inserted = await db
+    const upserted = await db
       .insert(notifications)
       .values(drafts.map((d) => ({ ...d, orgId })))
-      .onConflictDoNothing()
+      .onConflictDoUpdate({
+        target: [notifications.userId, notifications.dedupeKey],
+        set: {
+          kind: sql`excluded.kind`,
+          title: sql`excluded.title`,
+          body: sql`excluded.body`,
+          href: sql`excluded.href`,
+          periodStart: sql`excluded.period_start`,
+        },
+      })
       .returning({ id: notifications.id });
-    created = inserted.length;
+    touched = upserted.length;
   }
 
-  return { created, resolved: stale.length };
+  return { created: touched, resolved: stale.length };
 }
 
 /**
@@ -418,13 +447,22 @@ export async function syncIfStale(
   }
 }
 
+/**
+ * 읽음 개념을 두지 않는다.
+ *
+ * 이 알림은 메일함이 아니라 다시 계산되는 할 일 목록이다. 조건이 해소되면
+ * 저절로 사라진다. 거기에 읽음을 얹으면 "봤다"가 "처리했다"로 읽힌다 —
+ * 퇴근 기록이 아직 빠져 있는데 배지만 꺼진 상태가 만들어진다.
+ *
+ * 대신 숫자를 "확인할 항목 수"로 둔다. 그러면 목록과 항상 같은 값이고,
+ * 쳐다봐서는 안 줄고 고쳐야 줄어든다.
+ */
 export type NotificationRow = {
   id: string;
   kind: Draft["kind"];
   title: string;
   body: string;
   href: string;
-  readAt: Date | null;
   createdAt: Date;
 };
 
@@ -438,29 +476,27 @@ export async function listNotifications(
       title: notifications.title,
       body: notifications.body,
       href: notifications.href,
-      readAt: notifications.readAt,
       createdAt: notifications.createdAt,
     })
     .from(notifications)
     .where(eq(notifications.userId, viewer.id))
-    .orderBy(asc(notifications.readAt), desc(notifications.createdAt));
+    .orderBy(desc(notifications.createdAt));
 }
 
-export async function unreadCount(viewer: Viewer): Promise<number> {
-  const [row] = await db
-    .select({ n: sql<number>`count(*)::int` })
+/** 확인할 항목 수 + 위법 소지 여부. 색은 심각도, 숫자는 개수를 말한다 */
+export async function openItemCount(
+  viewer: Viewer,
+): Promise<{ total: number; critical: boolean }> {
+  const rows = await db
+    .select({ kind: notifications.kind })
     .from(notifications)
-    .where(
-      and(eq(notifications.userId, viewer.id), isNull(notifications.readAt)),
-    );
-  return row?.n ?? 0;
-}
+    .where(eq(notifications.userId, viewer.id));
 
-export async function markAllRead(viewer: Viewer): Promise<void> {
-  await db
-    .update(notifications)
-    .set({ readAt: now() })
-    .where(
-      and(eq(notifications.userId, viewer.id), isNull(notifications.readAt)),
-    );
+  return {
+    total: rows.length,
+    // 주 평균 52시간 초과와 마감 후 변경만 빨강. 나머지는 개수일 뿐이다
+    critical: rows.some(
+      (r) => r.kind === "legal_limit" || r.kind === "post_close_change",
+    ),
+  };
 }

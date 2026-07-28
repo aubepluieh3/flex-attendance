@@ -4,7 +4,7 @@ import "./globals.css";
 import { optionalViewer } from "./viewer";
 import { logoutAction } from "./login/actions";
 import { after } from "next/server";
-import { syncIfStale, unreadCount } from "@/db/notify";
+import { openItemCount, syncIfStale } from "@/db/notify";
 import { closeDueIfStale } from "@/db/close";
 import { now } from "@/lib/clock";
 import { Nav } from "./nav";
@@ -49,7 +49,9 @@ export default async function RootLayout({
     });
   }
 
-  const unread = viewer ? await unreadCount(viewer) : 0;
+  const items = viewer
+    ? await openItemCount(viewer)
+    : { total: 0, critical: false };
 
   // 로그인 전에는 사이드바를 두지 않는다
   if (!viewer) {
@@ -72,7 +74,11 @@ export default async function RootLayout({
               flex-attendance
             </Link>
 
-            <Nav role={viewer.role} unread={unread} />
+            <Nav
+              role={viewer.role}
+              openItems={items.total}
+              critical={items.critical}
+            />
 
             <div className="sidebar-foot">
               <Link href="/account" className="whoami">

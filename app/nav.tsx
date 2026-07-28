@@ -23,7 +23,21 @@ const MENU = [
   { href: "/people", label: "사용자", roles: ["hr"] },
 ] as const;
 
-export function Nav({ role, unread }: { role: string; unread: number }) {
+/**
+ * 배지는 "확인할 항목 수"다. 읽어서 줄지 않고 고쳐야 줄어든다.
+ *
+ * 색과 숫자의 역할을 나눈다 — 숫자는 개수, 색은 심각도. 개수를 늘 빨갛게
+ * 칠하면 며칠 남아 있는 개수가 그것만으로 압박이 된다.
+ */
+export function Nav({
+  role,
+  openItems,
+  critical,
+}: {
+  role: string;
+  openItems: number;
+  critical: boolean;
+}) {
   const pathname = usePathname();
 
   return (
@@ -39,8 +53,13 @@ export function Nav({ role, unread }: { role: string; unread: number }) {
               aria-current={active ? "page" : undefined}
             >
               {m.label}
-              {m.href === "/notifications" && unread > 0 && (
-                <span className="badge">{unread}</span>
+              {m.href === "/notifications" && openItems > 0 && (
+                <span
+                  className={critical ? "badge crit" : "badge plain"}
+                  aria-label={`확인할 항목 ${openItems}건`}
+                >
+                  {openItems}
+                </span>
               )}
             </Link>
           );

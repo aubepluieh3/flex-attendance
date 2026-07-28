@@ -658,14 +658,20 @@ export const notifications = pgTable(
     /** 눌렀을 때 갈 곳 */
     href: text("href").notNull(),
     periodStart: date("period_start", { mode: "string" }),
-    readAt: timestamp("read_at", { withTimezone: true }),
     createdAt: timestamp("created_at", { withTimezone: true })
       .notNull()
       .defaultNow(),
   },
+  /*
+   * 읽음 상태를 두지 않는다.
+   *
+   * 이 알림은 다시 계산되는 할 일 목록이라 조건이 해소되면 사라진다. 읽음을
+   * 얹으면 "봤다"가 "처리했다"로 읽혀서, 아직 할 일이 남았는데 배지만 꺼진
+   * 상태가 만들어진다.
+   */
   (t) => [
     uniqueIndex("notifications_dedupe").on(t.userId, t.dedupeKey),
-    index("notifications_user_unread").on(t.userId, t.readAt),
+    index("notifications_user").on(t.userId, t.createdAt),
   ],
 );
 

@@ -85,6 +85,13 @@
       "when": 1785204443410,
       "tag": "0011_colossal_guardian",
       "breakpoints": true
+    },
+    {
+      "idx": 12,
+      "version": "7",
+      "when": 1785207753852,
+      "tag": "0012_lame_rogue",
+      "breakpoints": true
     }
   ]
 }
