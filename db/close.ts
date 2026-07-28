@@ -260,6 +260,44 @@ export async function closeDuePeriods(
   return results;
 }
 
+/**
+ * 마감 방아쇠.
+ *
+ * cron 없이도 돌게 한다. 마감이 늦어도 그사이 데이터가 안 바뀌었으면 스냅샷
+ * 결과가 같으므로, 데이터를 바꾸는 순간 앞에서 닫으면 cron 과 결과가 같다.
+ *   임포트  → 늦게 온 파일이 확정된 과거를 덮어쓰는 것을 막는 것이 마감의 목적
+ *   보정·휴가·근무 → 고치려면 앱을 열어야 하므로 그 앞에서 닫힌다
+ *
+ * cron 을 나중에 얹어도 이게 남아 있는 게 낫다. 스케줄러가 조용히 멈추는 게
+ * 가장 흔한 실패인데, 그때 앱이 스스로 복구한다.
+ *
+ * 문턱: 마감은 무거운 쓰기다(사람마다 스냅샷). 유예가 3일 단위이므로 몇 분
+ * 늦는 것은 결과에 영향이 없다. 임포트는 force 로 문턱을 건너뛴다.
+ */
+const CLOSE_THROTTLE_MS = 5 * 60_000;
+const lastCloseRunAt = new Map<string, number>();
+
+export async function closeDueIfStale(
+  orgId: string,
+  asOf: Date,
+  opts: { force?: boolean } = {},
+): Promise<CloseResult[]> {
+  if (!opts.force) {
+    const prev = lastCloseRunAt.get(orgId);
+    if (prev !== undefined && asOf.getTime() - prev < CLOSE_THROTTLE_MS) {
+      return [];
+    }
+  }
+  lastCloseRunAt.set(orgId, asOf.getTime());
+  try {
+    return await closeDuePeriods(orgId, asOf);
+  } catch (e) {
+    // 실패했으면 문턱을 풀어 다음 요청이 다시 시도하게 둔다
+    lastCloseRunAt.delete(orgId);
+    throw e;
+  }
+}
+
 export type PeriodState = {
   status: "open" | "closed";
   closedAt: Date | null;

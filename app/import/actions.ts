@@ -3,6 +3,8 @@
 import { requestViewer } from "../viewer";
 import { rethrowControlFlow } from "../action-error";
 import { applyImport, type ImportReport } from "@/db/import";
+import { closeDueIfStale } from "@/db/close";
+import { now } from "@/lib/clock";
 import type { ColumnMapping } from "@/lib/csv";
 
 export type ImportState =
@@ -43,6 +45,16 @@ export async function importAction(
 
   try {
     const viewer = await requestViewer();
+
+    /*
+     * 임포트 전에 마감을 돌린다. 문턱을 건너뛴다(force).
+     *
+     * 늦게 온 파일이 확정된 과거를 덮어쓰는 것을 막는 게 마감의 목적이다.
+     * 여기서 몇 분 늦으면 바로 그 사고가 난다. 임포트는 드물고 수동이므로
+     * 매번 돌려도 비싸지 않다.
+     */
+    await closeDueIfStale(viewer.orgId, now(), { force: true });
+
     const report = await applyImport({
       viewer,
       fileName: file.name,

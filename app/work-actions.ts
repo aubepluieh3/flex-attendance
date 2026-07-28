@@ -3,6 +3,8 @@
 import { redirect } from "next/navigation";
 import { revalidatePath } from "next/cache";
 import { startWork, stopWork } from "@/db/checkin";
+import { closeDueIfStale } from "@/db/close";
+import { now } from "@/lib/clock";
 import { requestViewer } from "./viewer";
 import { rethrowControlFlow } from "./action-error";
 
@@ -30,6 +32,8 @@ async function done(fn: () => Promise<string>) {
 export async function startWorkAction() {
   await done(async () => {
     const viewer = await requestViewer("/");
+    // 마감을 먼저 돌린다 — 유예가 지난 기간에 새 기록이 들어가면 안 된다
+    await closeDueIfStale(viewer.orgId, now());
     await startWork(viewer);
     return "근무를 시작했습니다.";
   });
@@ -38,6 +42,7 @@ export async function startWorkAction() {
 export async function stopWorkAction() {
   await done(async () => {
     const viewer = await requestViewer("/");
+    await closeDueIfStale(viewer.orgId, now());
     const r = await stopWork(viewer);
     const h = Math.floor(r.minutes / 60);
     const m = r.minutes % 60;

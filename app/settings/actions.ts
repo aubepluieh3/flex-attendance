@@ -10,6 +10,8 @@ import {
   removeTimeOff,
   updateOrgRules,
 } from "@/db/settings";
+import { closeDueIfStale } from "@/db/close";
+import { now } from "@/lib/clock";
 import { requestViewer } from "../viewer";
 import { rethrowControlFlow } from "../action-error";
 
@@ -103,6 +105,8 @@ export async function removeHolidayAction(form: FormData) {
 
 export async function addTimeOffAction(form: FormData) {
   await done(async (viewer) => {
+    // 마감된 기간에 휴가를 넣지 못하게 먼저 돌린다
+    await closeDueIfStale(viewer.orgId, now());
     const kind = str(form, "kind");
     await addTimeOff(viewer, {
       employeeNo: str(form, "employeeNo"),

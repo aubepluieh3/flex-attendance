@@ -4,6 +4,7 @@ import { redirect } from "next/navigation";
 import { revalidatePath } from "next/cache";
 import { cancelTimeOff, decideTimeOff, TIME_OFF_LABEL } from "@/db/timeoff";
 import { syncNotifications } from "@/db/notify";
+import { closeDueIfStale } from "@/db/close";
 import { now } from "@/lib/clock";
 import { requestViewer } from "../viewer";
 import { rethrowControlFlow } from "../action-error";
@@ -23,6 +24,8 @@ export async function teamAction(form: FormData) {
 
   try {
     const viewer = await requestViewer();
+    // 승인도 그 기간에 쓰는 것이다. 마감을 먼저 돌린다
+    await closeDueIfStale(viewer.orgId, now());
     const op = str(form, "op");
 
     if (op === "cancelOff") {

@@ -11,6 +11,7 @@ import {
   type TimeOffKind,
 } from "@/db/timeoff";
 import { syncNotifications } from "@/db/notify";
+import { closeDueIfStale } from "@/db/close";
 import { now } from "@/lib/clock";
 import { requestViewer } from "../viewer";
 import { rethrowControlFlow } from "../action-error";
@@ -33,8 +34,15 @@ export async function recordsAction(form: FormData) {
 
   try {
     const viewer = await requestViewer();
-    const workDate = str(form, "workDate");
+    /*
+     * 고치기 전에 마감을 돌린다.
+     *
+     * 유예가 지난 기간은 닫혀 있어야 하고, 그 뒤에 도메인 가드가 거부한다.
+     * 이 순서가 아니면 "닫혀야 하는데 아직 안 닫힌 기간"에 보정이 들어간다.
+     */
+    await closeDueIfStale(viewer.orgId, now());
 
+    const workDate = str(form, "workDate");
     const op = str(form, "op");
 
     if (op === "revert") {
