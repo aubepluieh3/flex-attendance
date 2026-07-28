@@ -672,6 +672,25 @@ code {
   margin: 0 -2px;
   padding: 0 2px;
   -webkit-overflow-scrolling: touch;
+
+  /*
+   * 오른쪽에 더 있다는 신호.
+   *
+   * 임원 계정으로 걸어보니 전사 집계 표가 9열인데 5열만 보이고 야간·휴일·
+   * 52h 초과·미완료가 숨어 있었다. 스크롤은 되는데 "이게 다인가?" 로 읽힌다.
+   *
+   * background-attachment: local 두 겹으로 만든다 — 끝까지 밀면 그림자가
+   * 저절로 사라지고, JS 로 스크롤 위치를 추적할 필요가 없다.
+   */
+  background:
+    linear-gradient(to right, var(--surface) 30%, transparent) left / 24px 100%
+      no-repeat local,
+    linear-gradient(to left, var(--surface) 30%, transparent) right / 24px 100%
+      no-repeat local,
+    radial-gradient(farthest-side at 0 50%, rgba(16, 16, 20, 0.14), transparent)
+      left / 10px 100% no-repeat scroll,
+    radial-gradient(farthest-side at 100% 50%, rgba(16, 16, 20, 0.14), transparent)
+      right / 10px 100% no-repeat scroll;
 }
 
 table {
@@ -768,6 +787,22 @@ td.none {
 @media (max-width: 700px) {
   .hide-sm {
     display: none;
+  }
+}
+
+/*
+ * 좁은 화면에서는 그림자만으로 부족하다. 글자로도 알린다.
+ * 넓은 화면에서는 표가 다 보이므로 숨긴다.
+ */
+.scroll-hint {
+  display: none;
+}
+@media (max-width: 860px) {
+  .scroll-hint {
+    display: block;
+    margin-top: 8px;
+    font-size: 12px;
+    color: var(--ink-3);
   }
 }
 /*

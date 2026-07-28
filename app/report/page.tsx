@@ -146,6 +146,13 @@ export default async function ReportPage({
             </tbody>
           </table>
         </div>
+        {/*
+          9열인데 좁은 화면에서는 5열만 보인다. 야간·휴일·52h 초과·미완료가
+          숨어 있어서 "이게 다인가" 로 읽혔다.
+        */}
+        <p className="scroll-hint">
+          표를 옆으로 밀면 야간 · 휴일 · 52h 초과 · 미완료가 있습니다.
+        </p>
       </section>
 
       {people && (
@@ -197,6 +204,9 @@ export default async function ReportPage({
                 </tbody>
               </table>
             </div>
+            <p className="scroll-hint">
+              표를 옆으로 밀면 주 평균 · 법정초과 · 확인이 있습니다.
+            </p>
           </section>
 
           <section className="card">

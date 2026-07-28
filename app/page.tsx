@@ -637,6 +637,9 @@ export default async function Page({
             </tbody>
           </table>
         </div>
+        <p className="scroll-hint">
+          표를 옆으로 밀면 체류 · 휴게 · 실근무 · 비고가 있습니다.
+        </p>
       </details>
     </main>
   );
