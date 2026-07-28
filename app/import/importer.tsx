@@ -278,7 +278,8 @@ function Report({ report }: { report: ImportReport }) {
       )}
 
       {report.recomputed.length > 0 && (
-        <table style={{ marginTop: 14 }}>
+        <div className="scroll-x" style={{ marginTop: 14 }}>
+        <table>
           <thead>
             <tr>
               <th>사람</th>
@@ -298,6 +299,7 @@ function Report({ report }: { report: ImportReport }) {
             ))}
           </tbody>
         </table>
+        </div>
       )}
     </div>
   );

@@ -319,7 +319,8 @@ export default async function SettingsPage({
             등록된 공휴일이 없습니다. 공휴일은 소정근로에서 빠집니다.
           </p>
         ) : (
-          <table style={{ marginTop: 14 }}>
+          <div className="scroll-x" style={{ marginTop: 14 }}>
+          <table>
             <tbody>
               {holidayRows.map((h) => (
                 <tr key={h.id}>
@@ -338,6 +339,7 @@ export default async function SettingsPage({
               ))}
             </tbody>
           </table>
+          </div>
         )}
       </section>
 

@@ -154,7 +154,8 @@ export default async function PeriodsPage({
               )}
 
               {p.events.length > 0 && (
-                <table style={{ marginTop: 14 }}>
+                <div className="scroll-x" style={{ marginTop: 14 }}>
+                <table>
                   <thead>
                     <tr>
                       <th>시각</th>
@@ -174,6 +175,7 @@ export default async function PeriodsPage({
                     ))}
                   </tbody>
                 </table>
+                </div>
               )}
             </section>
           );
