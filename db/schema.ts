@@ -187,6 +187,16 @@ export const orgs = pgTable("orgs", {
 
   /** 정산기간 종료 후 보정 유예일. 이 기간이 지나면 자동 마감된다. */
   closeGraceDays: integer("close_grace_days").notNull().default(3),
+  /**
+   * 열람 이력 보존 일수.
+   *
+   * 근태 열람 기록은 개인정보다. 법정 보존 의무가 있는 건 근로자 명부·임금대장
+   * (근기법 3년)이고 열람 로그는 아니다. 목적이 "부적절 열람 감사"이므로
+   * 반기면 충분하다고 보고 180일로 둔다. 회사가 늘리려면 여기서 바꾼다.
+   */
+  accessLogRetentionDays: integer("access_log_retention_days")
+    .notNull()
+    .default(180),
 
   createdAt: timestamp("created_at", { withTimezone: true })
     .notNull()
@@ -273,6 +283,15 @@ export const importBatches = pgTable("import_batches", {
   rowCount: integer("row_count").notNull().default(0),
   insertedCount: integer("inserted_count").notNull().default(0),
   skippedCount: integer("skipped_count").notNull().default(0),
+  /**
+   * 무효화 이력.
+   *
+   * 원본(attendance_logs)은 append-only 가 원칙인데 여기가 예외다. 잘못 올린
+   * 파일은 "있었던 사실"이 아니라 실수이므로 지우는 게 맞다. 대신 배치 행은
+   * 남겨서 무효화한 사람과 시각을 기록한다.
+   */
+  revokedAt: timestamp("revoked_at", { withTimezone: true }),
+  revokedBy: uuid("revoked_by").references((): AnyPgColumn => users.id),
   createdAt: timestamp("created_at", { withTimezone: true })
     .notNull()
     .defaultNow(),
@@ -737,5 +756,33 @@ export const accessLogs = pgTable(
   (t) => [
     index("access_logs_actor").on(t.actorUserId, t.createdAt),
     index("access_logs_target").on(t.targetUserId, t.createdAt),
+    /* 보존 기간이 지난 것을 지울 때 쓴다 */
+    index("access_logs_created").on(t.orgId, t.createdAt),
   ],
+);
+
+/**
+ * 오류 기록.
+ *
+ * 외부 모니터링(Sentry 등)으로 보내지 않는다 — 스택트레이스에 사번·이름이
+ * 섞이기 쉽고, 근태 데이터를 외부 인프라로 내보내는 판단이 따라온다.
+ *
+ * 그래서 스택트레이스를 저장하지 않는다. 디버깅에 실제로 필요한 건 대부분
+ * "어디서 무슨 메시지"이고, 스택은 개인정보가 새는 통로가 된다.
+ */
+export const errorLogs = pgTable(
+  "error_logs",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    /** org 를 모르는 시점(로그인 전)에도 기록해야 하므로 nullable */
+    orgId: uuid("org_id").references(() => orgs.id),
+    userId: uuid("user_id").references(() => users.id),
+    /** 액션 이름이나 경로 */
+    where: text("where").notNull(),
+    message: text("message").notNull(),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+  },
+  (t) => [index("error_logs_created").on(t.createdAt)],
 );

@@ -1,7 +1,8 @@
-import { and, asc, desc, eq, gte, lte } from "drizzle-orm";
+import { and, asc, desc, eq, gte, lt, lte } from "drizzle-orm";
 import { DateTime } from "luxon";
 import { db } from "./client";
 import {
+  accessLogs,
   periodCloseEvents,
   periodSnapshots,
   settlementPeriods,
@@ -255,6 +256,28 @@ export async function closeDuePeriods(
 
     // 다음 기간으로
     cursor = DateTime.fromISO(range.end, { zone }).plus({ days: 1 });
+  }
+
+  /*
+   * 보존 기간이 지난 열람 이력을 여기서 지운다.
+   *
+   * 별도 배치를 만들지 않는 이유: 마감은 이미 주 1회 돌고, "확정된 기간의
+   * 오래된 열람 로그를 정리한다"는 게 의미상 자연스럽게 붙는다. 방아쇠를
+   * 늘리면 "안 돌면 조용히 실패하는 것"이 하나 더 생긴다.
+   *
+   * 근태 열람 기록은 개인정보다. 파기 정책 없이 무한 보관하면 안 된다.
+   */
+  const cutoff = DateTime.fromJSDate(asOf, { zone })
+    .minus({ days: rules.accessLogRetentionDays })
+    .toJSDate();
+  const purged = await db
+    .delete(accessLogs)
+    .where(and(eq(accessLogs.orgId, orgId), lt(accessLogs.createdAt, cutoff)))
+    .returning({ id: accessLogs.id });
+  if (purged.length > 0) {
+    console.log(
+      `열람 이력 ${purged.length}건 파기 (보존 ${rules.accessLogRetentionDays}일)`,
+    );
   }
 
   return results;

@@ -6,7 +6,7 @@ import { closeDuePeriods, reopenPeriod } from "@/db/close";
 import { AccessDenied } from "@/db/access";
 import { now } from "@/lib/clock";
 import { requestViewer } from "../viewer";
-import { rethrowControlFlow } from "../action-error";
+import { reportActionError } from "../action-error";
 
 /**
  * 마감·재마감 액션.
@@ -25,7 +25,7 @@ async function done(fn: () => Promise<string>) {
     revalidatePath("/records");
     revalidatePath("/");
   } catch (e) {
-    rethrowControlFlow(e);
+    await reportActionError("periodsAction", e);
     query = `err=${encodeURIComponent((e as Error).message)}`;
   }
   redirect(`/periods?${query}`);

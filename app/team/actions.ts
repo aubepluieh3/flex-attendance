@@ -7,7 +7,7 @@ import { syncNotifications } from "@/db/notify";
 import { closeDueIfStale } from "@/db/close";
 import { now } from "@/lib/clock";
 import { requestViewer } from "../viewer";
-import { rethrowControlFlow, str } from "../action-error";
+import { reportActionError, str } from "../action-error";
 
 /**
  * 팀 현황 액션 — 휴가 승인 / 반려 / 취소.
@@ -58,7 +58,7 @@ export async function teamAction(form: FormData) {
     revalidatePath("/");
     revalidatePath("/notifications");
   } catch (e) {
-    rethrowControlFlow(e);
+    await reportActionError("teamAction", e);
     query = `err=${encodeURIComponent((e as Error).message)}`;
   }
 

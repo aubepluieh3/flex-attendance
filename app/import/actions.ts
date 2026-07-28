@@ -1,11 +1,34 @@
 "use server";
 
+import { redirect } from "next/navigation";
+import { revalidatePath } from "next/cache";
 import { requestViewer } from "../viewer";
-import { rethrowControlFlow } from "../action-error";
+import { reportActionError, str } from "../action-error";
 import { applyImport, type ImportReport } from "@/db/import";
+import { revokeBatch } from "@/db/import-revoke";
 import { closeDueIfStale } from "@/db/close";
 import { now } from "@/lib/clock";
 import type { ColumnMapping } from "@/lib/csv";
+
+/** 임포트 무효화. 결과를 쿼리 파라미터로 돌려준다 (JS 없이도 동작) */
+export async function revokeBatchAction(form: FormData) {
+  let query: string;
+  try {
+    const viewer = await requestViewer();
+    const r = await revokeBatch(viewer, str(form, "batchId"));
+    query = `msg=${encodeURIComponent(
+      `${r.fileName} 을 무효화했습니다. 태그 ${r.removed}건 삭제 · ${r.people}명 재계산.`,
+    )}`;
+    revalidatePath("/import");
+    revalidatePath("/");
+    revalidatePath("/team");
+    revalidatePath("/report");
+  } catch (e) {
+    await reportActionError("importAction", e);
+    query = `err=${encodeURIComponent((e as Error).message)}`;
+  }
+  redirect(`/import?${query}`);
+}
 
 export type ImportState =
   | { kind: "idle" }
@@ -63,7 +86,7 @@ export async function importAction(
     });
     return { kind: "done", report };
   } catch (e) {
-    rethrowControlFlow(e);
+    await reportActionError("importAction", e);
     return { kind: "error", message: (e as Error).message };
   }
 }

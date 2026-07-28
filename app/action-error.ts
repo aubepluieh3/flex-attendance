@@ -15,6 +15,28 @@ export function rethrowControlFlow(e: unknown): void {
   }
 }
 
+/**
+ * 액션이 실패했을 때 남긴다.
+ *
+ * 지금까지는 오류가 사용자 화면에 배너로만 뜨고 아무 데도 안 남았다. 500 이
+ * 떠도 사용자가 말해주기 전까지 몰랐다. 흐름 제어(redirect)는 걸러낸다 —
+ * 그건 오류가 아니다.
+ */
+export async function reportActionError(
+  where: string,
+  e: unknown,
+  viewer?: { id: string; orgId: string } | null,
+): Promise<void> {
+  rethrowControlFlow(e);
+  const { recordError } = await import("@/db/errors");
+  await recordError({
+    where,
+    error: e,
+    orgId: viewer?.orgId ?? null,
+    userId: viewer?.id ?? null,
+  });
+}
+
 /** FormData 문자열 읽기. 액션 파일 네 곳이 각자 갖고 있었다. */
 export const str = (form: FormData, key: string) =>
   String(form.get(key) ?? "");

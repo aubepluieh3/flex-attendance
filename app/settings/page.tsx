@@ -2,6 +2,7 @@ import Link from "next/link";
 import { DateTime } from "luxon";
 import { listUsers, loadOrgRules } from "@/db/access";
 import { listHolidays, listTimeOff, ruleWarnings } from "@/db/settings";
+import { listErrors } from "@/db/errors";
 import { resolvePeriod, shiftPeriod } from "@/lib/attendance/period";
 import { now } from "@/lib/clock";
 import { requestViewer } from "../viewer";
@@ -69,6 +70,7 @@ export default async function SettingsPage({
 
   const holidayRows = await listHolidays(viewer.orgId);
   const people = await listUsers();
+  const errors = await listErrors(viewer);
 
   const opts = {
     kind: rules.settlementKind,
@@ -436,6 +438,57 @@ export default async function SettingsPage({
           </table>
           </div>
         )}
+      </section>
+
+      {/*
+        오류 기록.
+        지금까지는 오류가 사용자 화면에 배너로만 뜨고 아무 데도 안 남았다.
+        500 이 떠도 사용자가 말해주기 전까지 몰랐다.
+        외부 모니터링을 쓰지 않는 이유는 근태 데이터를 밖으로 보내지 않기 위해서다.
+      */}
+      <section className="card">
+        <h2>
+          오류 기록
+          {errors.length > 0 && (
+            <span className="tag">최근 {errors.length}건</span>
+          )}
+        </h2>
+        {errors.length === 0 ? (
+          <p className="empty">기록된 오류가 없습니다.</p>
+        ) : (
+          <div className="scroll-x">
+            <table>
+              <thead>
+                <tr>
+                  <th>시각</th>
+                  <th>위치</th>
+                  <th>사람</th>
+                  <th>메시지</th>
+                </tr>
+              </thead>
+              <tbody>
+                {errors.map((e) => (
+                  <tr key={e.id}>
+                    <td>
+                      {DateTime.fromJSDate(e.createdAt, { zone }).toFormat(
+                        "M/d HH:mm",
+                      )}
+                    </td>
+                    <td className="none">{e.where}</td>
+                    <td className="none">{e.userName ?? "—"}</td>
+                    <td style={{ textAlign: "left", whiteSpace: "normal" }}>
+                      {e.message}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+        <p className="empty" style={{ marginTop: 10 }}>
+          30일 지난 기록은 지워집니다. 스택트레이스는 저장하지 않습니다 — 사번·
+          이름이 섞여 들어갈 수 있기 때문입니다.
+        </p>
       </section>
     </main>
   );

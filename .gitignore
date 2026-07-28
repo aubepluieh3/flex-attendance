@@ -18,5 +18,8 @@ data/*.db-journal
 tmp-*
 tmp-shots/
 
+# DB 덤프 — 전 직원 근태가 들어 있다. 저장소에 올라가면 안 된다
+backups/
+
 # Pretendard 서브셋은 저장소에 포함한다 (self-host, CDN 의존 없음)
 !public/fonts/**

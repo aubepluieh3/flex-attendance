@@ -11,7 +11,7 @@ import {
 } from "@/db/people";
 import type { Role } from "@/db/access";
 import { requestViewer } from "../viewer";
-import { rethrowControlFlow, str } from "../action-error";
+import { reportActionError, str } from "../action-error";
 
 /**
  * 사용자 관리 액션을 하나로 모은다.
@@ -97,7 +97,7 @@ export async function peopleAction(
         result = { error: `알 수 없는 요청입니다: ${op}` };
     }
   } catch (e) {
-    rethrowControlFlow(e);
+    await reportActionError("peopleAction", e);
     return { error: (e as Error).message };
   }
 

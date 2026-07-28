@@ -85,6 +85,7 @@ export type OrgRules = {
   settlementKind: "week" | "month";
   weekStartDay: number;
   closeGraceDays: number;
+  accessLogRetentionDays: number;
   reviewThresholdMinutes: number;
   attendance: AttendanceRules;
   settlement: SettlementRules;
@@ -109,6 +110,7 @@ export async function loadOrgRules(orgId: string): Promise<OrgRules> {
     settlementKind: org.settlementPeriod,
     weekStartDay: org.weekStartDay,
     closeGraceDays: org.closeGraceDays,
+    accessLogRetentionDays: org.accessLogRetentionDays,
     reviewThresholdMinutes: org.reviewThresholdMinutes,
     attendance: {
       timezone: org.timezone,

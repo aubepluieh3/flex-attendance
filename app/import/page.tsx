@@ -1,13 +1,22 @@
 import Link from "next/link";
 import { loadOrgRules } from "@/db/access";
+import { fmtWhen, listBatches } from "@/db/import-revoke";
+import { ROLE_LABEL } from "@/lib/format";
 import { requestViewer } from "../viewer";
 import { Importer } from "./importer";
+import { revokeBatchAction } from "./actions";
 
 export const dynamic = "force-dynamic";
 
-export default async function ImportPage() {
+export default async function ImportPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ msg?: string; err?: string }>;
+}) {
+  const { msg, err } = await searchParams;
   const viewer = await requestViewer("/import");
   const rules = await loadOrgRules(viewer.orgId);
+  const batches = viewer.role === "hr" ? await listBatches(viewer) : [];
 
   return (
     <main className="page">
@@ -49,15 +58,65 @@ export default async function ImportPage() {
           </p>
         </section>
       ) : (
-        <Importer timezone={rules.attendance.timezone} />
+        <>
+          {(msg || err) && (
+            <section className="card">
+              <ul className="issues">
+                <li>
+                  <span
+                    className={`icon ${err ? "crit" : "warn"}`}
+                    aria-hidden="true"
+                  >
+                    !
+                  </span>
+                  <span className="what">{err ?? msg}</span>
+                </li>
+              </ul>
+            </section>
+          )}
+
+          <Importer timezone={rules.attendance.timezone} />
+
+          {/*
+            무효화가 없으면 HR 이 임포트를 두려워하고, 그러면 근태가 안 들어온다.
+            잘못 올린 파일은 "있었던 사실"이 아니라 실수다.
+          */}
+          <section className="card">
+            <h2>최근 반영 이력</h2>
+            {batches.length === 0 ? (
+              <p className="empty">아직 반영한 파일이 없습니다.</p>
+            ) : (
+              <ul className="offlist">
+                {batches.map((b) => (
+                  <li key={b.id}>
+                    <span className="d">
+                      {fmtWhen(b.createdAt, rules.attendance.timezone)}
+                    </span>
+                    <span className="k">{b.fileName}</span>
+                    <span className="why">
+                      {b.revokedAt
+                        ? `무효화됨 · ${b.revokedByName}`
+                        : `${b.insertedCount}건 반영 · ${b.skippedCount}건 중복 제외 · ${b.uploadedByName}`}
+                    </span>
+                    {!b.revokedAt && b.liveTags > 0 && (
+                      <form action={revokeBatchAction}>
+                        <input type="hidden" name="batchId" value={b.id} />
+                        <button type="submit" className="danger">
+                          무효화
+                        </button>
+                      </form>
+                    )}
+                  </li>
+                ))}
+              </ul>
+            )}
+            <p className="empty" style={{ marginTop: 10 }}>
+              무효화하면 그 파일로 들어온 태그를 지우고 해당 인원의 집계를 다시
+              계산합니다. 마감된 기간이 걸린 파일은 무효화할 수 없습니다.
+            </p>
+          </section>
+        </>
       )}
     </main>
   );
 }
-
-const ROLE_LABEL = {
-  member: "사원",
-  manager: "팀장",
-  hr: "HR",
-  executive: "임원",
-} as const;

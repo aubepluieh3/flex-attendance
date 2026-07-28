@@ -13,7 +13,7 @@ import {
 import { closeDueIfStale } from "@/db/close";
 import { now } from "@/lib/clock";
 import { requestViewer } from "../viewer";
-import { num, rethrowControlFlow, str } from "../action-error";
+import { num, reportActionError, str } from "../action-error";
 
 /**
  * 설정 액션.
@@ -36,7 +36,7 @@ async function done(
     revalidatePath("/team");
     revalidatePath("/report");
   } catch (e) {
-    rethrowControlFlow(e);
+    await reportActionError("settingsAction", e);
     query = `err=${encodeURIComponent((e as Error).message)}`;
   }
   redirect(`/settings?${query}`);

@@ -6,7 +6,7 @@ import { startWork, stopWork } from "@/db/checkin";
 import { closeDueIfStale } from "@/db/close";
 import { now } from "@/lib/clock";
 import { requestViewer } from "./viewer";
-import { rethrowControlFlow } from "./action-error";
+import { reportActionError } from "./action-error";
 
 /**
  * 근무 시작 / 종료.
@@ -23,7 +23,7 @@ async function done(fn: () => Promise<string>) {
     revalidatePath("/team");
     revalidatePath("/notifications");
   } catch (e) {
-    rethrowControlFlow(e);
+    await reportActionError("workAction", e);
     query = `err=${encodeURIComponent((e as Error).message)}`;
   }
   redirect(`/?${query}`);

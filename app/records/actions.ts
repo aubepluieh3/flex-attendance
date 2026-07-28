@@ -14,7 +14,7 @@ import { syncNotifications } from "@/db/notify";
 import { closeDueIfStale } from "@/db/close";
 import { now } from "@/lib/clock";
 import { requestViewer } from "../viewer";
-import { rethrowControlFlow, str } from "../action-error";
+import { reportActionError, str } from "../action-error";
 
 /**
  * 보정 액션.
@@ -86,7 +86,7 @@ export async function recordsAction(form: FormData) {
     revalidatePath("/notifications");
     revalidatePath("/team");
   } catch (e) {
-    rethrowControlFlow(e);
+    await reportActionError("recordsAction", e);
     query = `err=${encodeURIComponent((e as Error).message)}`;
   }
 
