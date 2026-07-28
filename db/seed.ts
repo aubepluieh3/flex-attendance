@@ -30,7 +30,9 @@ import {
   demoPeriods,
   demoSessionsFor,
   demoTagsFor,
+  demoTimeOffFor,
 } from "@/lib/seed";
+import { deductFor } from "./timeoff";
 import { now } from "@/lib/clock";
 
 /**
@@ -156,6 +158,29 @@ async function main() {
     sessionCount += 1;
   }
 
+  // 휴가 — 승인 대기 1건과 승인된 반차 1건
+  const hr = people.find((p) => p.employeeNo === "F2014-002");
+  let offCount = 0;
+  for (const o of demoTimeOffFor(asOf)) {
+    const user = idByNo.get(o.employeeNo);
+    if (!user) continue;
+    const approved = o.status === "approved";
+    await db.insert(timeOff).values({
+      orgId: org.id,
+      userId: user.id,
+      date: o.date,
+      kind: o.kind,
+      deductMinutes: deductFor(o.kind, org.standardMinutesPerDay),
+      reason: o.reason,
+      status: o.status,
+      requestedBy: user.id,
+      decidedBy: approved ? (hr?.id ?? user.id) : null,
+      decidedAt: approved ? asOf : null,
+      createdBy: user.id,
+    });
+    offCount += 1;
+  }
+
   for (const range of [twoAgo, last, current]) {
     await db.insert(settlementPeriods).values({
       orgId: org.id,
@@ -182,7 +207,7 @@ async function main() {
   console.log(`오늘: ${today}`);
   console.log(`정산기간: ${twoAgo.start} ~ ${current.end} (주 3개)`);
   console.log(
-    `사용자 ${demoPeople.length}명 · 태그 ${tagCount}건 · 앱 근무구간 ${sessionCount}건 · work_days ${dayRows}건`,
+    `사용자 ${demoPeople.length}명 · 태그 ${tagCount}건 · 앱 근무구간 ${sessionCount}건 · 휴가 ${offCount}건 · work_days ${dayRows}건`,
   );
   console.log(`로그인 비밀번호: ${DEMO_PASSWORD}`);
   for (const p of demoPeople) {

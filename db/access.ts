@@ -281,6 +281,9 @@ export async function loadTimeOff(
     .where(
       and(
         eq(timeOff.userId, targetUserId),
+        // 승인된 것만 집계에 들어간다. 신청만으로 소정근로가 줄면
+        // 본인이 자기 목표를 낮출 수 있다.
+        eq(timeOff.status, "approved"),
         gte(timeOff.date, range.start),
         lte(timeOff.date, range.end),
       ),

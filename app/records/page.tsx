@@ -4,6 +4,7 @@ import { listAdjustments } from "@/db/adjust";
 import { isPeriodClosed } from "@/db/close";
 import { estimateFor } from "@/db/baseline";
 import { sessionsByDate } from "@/db/checkin";
+import { listMyTimeOff } from "@/db/timeoff";
 import { resolvePeriod } from "@/lib/attendance/period";
 import type { ComputedDay, DayFlag } from "@/lib/attendance/types";
 import { now } from "@/lib/clock";
@@ -91,6 +92,13 @@ export default async function RecordsPage({
   const off = new Map(
     (await loadTimeOff(viewer, viewer.id, range)).map((o) => [o.date, o]),
   );
+  const myOff = await listMyTimeOff(viewer);
+  /** 승인·대기 둘 다. 대기 중인 휴가도 신청자에게는 예정이다 */
+  const offAll = new Map(
+    myOff
+      .filter((o) => o.status !== "rejected")
+      .map((o) => [o.date, o] as const),
+  );
 
   const byDate = new Map<string, ComputedDay>(days.map((d) => [d.workDate, d]));
   const adjustedDates = new Set(
@@ -107,9 +115,12 @@ export default async function RecordsPage({
   /*
    * 이 화면의 목적은 "고칠 날 찾기"다. 아직 오지 않은 날을 카드로 늘어놓으면
    * 화면 대부분이 "아직 오지 않은 날입니다"가 된다. 주의 모양은 대시보드가 준다.
+   *
+   * 단 앞으로 잡힌 휴가는 보여준다. 안 보이면 "내가 연차 냈던가?"를
+   * 확인할 방법이 없다.
    */
-  const dates = allDates.filter((d) => d <= today);
-  const upcoming = allDates.filter((d) => d > today);
+  const dates = allDates.filter((d) => d <= today || offAll.has(d));
+  const upcoming = allDates.filter((d) => d > today && !offAll.has(d));
 
   const time = (d: Date | null) =>
     d ? DateTime.fromJSDate(d, { zone }).toFormat("HH:mm") : "";
@@ -187,14 +198,18 @@ export default async function RecordsPage({
         const day = byDate.get(date);
         const dt = DateTime.fromISO(date, { zone });
         const dow = WEEKDAY[dt.weekday - 1];
-        const dayOff = off.get(date);
+        // 승인된 휴가(off)가 없으면 대기 중인 신청이라도 보여준다
+        const approvedOff = off.get(date);
+        const dayOff = approvedOff ?? offAll.get(date);
+        const offPending = !approvedOff && Boolean(offAll.get(date));
         /**
          * 온종일 휴가면 손댈 게 없다. 반차는 반나절 근무가 있으므로 보정 대상이다.
          * 휴가일에 기록이 있으면 그건 "휴가일 근무"로 따로 걸린다(정산에서 판정).
          */
         const fullDayOff = dayOff?.kind === "full" || dayOff?.kind === "unpaid";
+        // 아직 오지 않은 날은 고칠 것이 없다 (휴가 때문에 목록에 올라온 날)
         const needsFix =
-          !fullDayOff && (!day || day.status === "incomplete");
+          !fullDayOff && date <= today && (!day || day.status === "incomplete");
         const wasAdjusted = adjustedDates.has(date);
         const daySessions = sessions.get(date) ?? [];
         /**
@@ -234,7 +249,10 @@ export default async function RecordsPage({
                 <span className="day-sum none">기록 없음</span>
               )}
               {dayOff && (
-                <span className="tag">{OFF_LABEL[dayOff.kind]}</span>
+                <span className="tag">
+                  {OFF_LABEL[dayOff.kind]}
+                  {offPending && " (승인 대기)"}
+                </span>
               )}
               {day?.status === "open" && (
                 <span className="status good inline">
@@ -327,11 +345,19 @@ export default async function RecordsPage({
               폼을 열어두면 8월 2일 근무를 미리 신고할 수 있고, 안 지난 날 6개가
               화면 길이를 세 배로 늘린다.
             */}
-            {!closed && fullDayOff && !day && (
+            {!closed && dayOff && !day && (
               <p className="empty">
-                {OFF_LABEL[dayOff.kind]}로 등록된 날입니다. 소정근로에서 이미
-                빠져 있으니 따로 보정할 것이 없습니다.
+                {OFF_LABEL[dayOff.kind]}
+                {offPending
+                  ? "를 신청했습니다. 승인되면 소정근로에서 빠집니다."
+                  : fullDayOff
+                    ? "로 등록된 날입니다. 소정근로에서 이미 빠져 있으니 따로 보정할 것이 없습니다."
+                    : "로 등록된 날입니다. 반나절은 근무일이라 기록이 들어옵니다."}
               </p>
+            )}
+
+            {!closed && !dayOff && date > today && (
+              <p className="empty">아직 오지 않은 날입니다.</p>
             )}
 
             {/*
@@ -339,7 +365,7 @@ export default async function RecordsPage({
               있으니 먼저 펼치지 않는다 — 시작하지도 않은 날에 보정 폼이
               열려 있으면 "여기에 시간을 적으라"는 말로 읽힌다.
             */}
-            {!closed && !(fullDayOff && !day) && (
+            {!closed && date <= today && !(fullDayOff && !day) && (
               <details className="adjust-box" open={needsFix && date < today}>
                 <summary>
                   {needsFix && date < today ? "이 날 보정하기" : "시각 정정"}
@@ -406,6 +432,94 @@ export default async function RecordsPage({
           은 아직 오지 않았습니다.
         </p>
       )}
+
+      {/*
+        휴가 신청.
+        승인 전에는 소정근로가 줄지 않는다 — 그렇지 않으면 본인이 자기 목표를
+        낮출 수 있다. 잔여 연차는 관리하지 않으므로 그 사실을 밝힌다.
+      */}
+      <section className="card">
+        <h2>휴가 신청</h2>
+        <form action={recordsAction} className="adjust">
+          <input type="hidden" name="op" value="requestOff" />
+          <input type="hidden" name="period" value={range.start} />
+          <label className="field">
+            <span>날짜</span>
+            <input type="date" name="offDate" required defaultValue={today} />
+          </label>
+          <label className="field">
+            <span>종류</span>
+            <select name="kind" defaultValue="full">
+              <option value="full">연차</option>
+              <option value="half_am">오전 반차</option>
+              <option value="half_pm">오후 반차</option>
+              <option value="unpaid">무급휴가</option>
+            </select>
+          </label>
+          <label className="field grow">
+            <span>
+              사유<b> *</b>
+            </span>
+            <input
+              type="text"
+              name="offReason"
+              required
+              placeholder="개인 사정"
+            />
+          </label>
+          <button type="submit">신청</button>
+        </form>
+        <p className="empty" style={{ marginTop: 10 }}>
+          승인되면 소정근로에서 빠집니다. 승인 전에는 반영되지 않습니다.
+          <br />
+          남은 연차 일수는 이 앱에서 관리하지 않습니다 — 인사팀 기준을 따르세요.
+        </p>
+
+        {myOff.length > 0 && (
+          <ul className="offlist">
+            {myOff.map((o) => (
+              <li key={o.id}>
+                <span className="d">
+                  {DateTime.fromISO(o.date, { zone }).toFormat("M월 d일")}
+                </span>
+                <span className="k">{OFF_LABEL[o.kind]}</span>
+                <span
+                  className={
+                    o.status === "approved"
+                      ? "status good inline"
+                      : o.status === "rejected"
+                        ? "status crit inline"
+                        : "status muted inline"
+                  }
+                >
+                  <span className="dot" aria-hidden="true" />
+                  {o.status === "approved"
+                    ? `승인 · ${o.decidedByName}`
+                    : o.status === "rejected"
+                      ? "반려"
+                      : "승인 대기"}
+                </span>
+                <span className="why">
+                  {o.status === "rejected" && o.decisionNote
+                    ? `반려 사유: ${o.decisionNote}`
+                    : (o.reason ?? "")}
+                </span>
+                {/* 승인 후에는 본인이 취소할 수 없다 (팀장 결정) */}
+                {o.status !== "approved" && (
+                  <form action={recordsAction}>
+                    <input type="hidden" name="op" value="cancelOff" />
+                    <input type="hidden" name="offId" value={o.id} />
+                    <input type="hidden" name="period" value={range.start} />
+                    <button type="submit" className="pill">
+                      취소
+                    </button>
+                  </form>
+                )}
+              </li>
+            ))}
+          </ul>
+        )}
+      </section>
 
       <section className="card">
         <h2>보정 이력</h2>

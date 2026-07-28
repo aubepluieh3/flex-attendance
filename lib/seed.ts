@@ -161,6 +161,46 @@ export function demoTagsFor(asOf: Date = now()): DemoTags[] {
   ];
 }
 
+export type DemoTimeOff = {
+  employeeNo: string;
+  date: string;
+  kind: "full" | "half_am" | "half_pm" | "unpaid";
+  reason: string;
+  status: "pending" | "approved";
+};
+
+/**
+ * 휴가 신청.
+ *
+ * 승인 대기 1건이 없으면 팀장 화면의 승인 흐름을 아무도 볼 수 없다.
+ * 승인된 반차 1건은 "반차 쓰고 반나절 일한 날"이 확인 대상으로 안 올라가는지
+ * 보는 용도다 — 이게 걸리면 아무도 반차를 신청하지 않는다.
+ */
+export function demoTimeOffFor(asOf: Date = now()): DemoTimeOff[] {
+  const { today, current, last } = demoPeriods(asOf);
+  const upcoming =
+    businessDays(current.start, current.end).find((d) => d > today) ??
+    current.end;
+  const halfDay = businessDays(last.start, last.end)[2];
+
+  return [
+    {
+      employeeNo: "F2019-041",
+      date: upcoming,
+      kind: "full",
+      reason: "병원 예약",
+      status: "pending",
+    },
+    {
+      employeeNo: "F2021-117",
+      date: halfDay,
+      kind: "half_pm",
+      reason: "가족 행사",
+      status: "approved",
+    },
+  ];
+}
+
 export type DemoSession = {
   employeeNo: string;
   workDate: string;

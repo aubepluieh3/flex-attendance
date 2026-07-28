@@ -144,6 +144,7 @@ export async function loadTeamRows(
       .where(
         and(
           inArray(timeOff.userId, ids),
+          eq(timeOff.status, "approved"),
           gte(timeOff.date, range.start),
           lte(timeOff.date, range.end),
         ),

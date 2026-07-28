@@ -1,10 +1,11 @@
-import { and, asc, desc, eq, inArray, isNull, sql } from "drizzle-orm";
+import { and, asc, desc, eq, gte, inArray, isNull, ne, sql } from "drizzle-orm";
 import { DateTime } from "luxon";
 import { db } from "./client";
-import { notifications, teams, users } from "./schema";
+import { notifications, teams, timeOff, users } from "./schema";
 import { loadOrgRules, type OrgRules, type Viewer } from "./access";
 import { isPeriodClosed, loadPeriodState } from "./close";
 import { loadTeamRows } from "./team";
+import { listPendingFor, TIME_OFF_LABEL } from "./timeoff";
 import {
   resolvePeriod,
   shiftPeriod,
@@ -31,12 +32,15 @@ type Draft = {
     | "legal_limit"
     | "period_closing"
     | "post_close_change"
-    | "team_review";
+    | "team_review"
+    | "time_off_pending"
+    | "time_off_decided";
   dedupeKey: string;
   title: string;
   body: string;
   href: string;
-  periodStart: string;
+  /** 정산기간과 무관한 알림(휴가 승인 등)은 null */
+  periodStart: string | null;
 };
 
 const md = (date: string, zone: string) =>
@@ -254,6 +258,88 @@ export async function syncNotifications(
         periodStart: range.start,
       });
     }
+  }
+
+  /*
+   * 휴가 승인 대기.
+   *
+   * 팀장이 팀 현황을 열지 않으면 신청이 방치된다. 다른 사람이 기다리는
+   * 유일한 항목이라 알림에 올린다. 결정되면 조건이 사라져 저절로 없어진다.
+   */
+  const approvers = await db
+    .select({
+      id: users.id,
+      orgId: users.orgId,
+      name: users.name,
+      role: users.role,
+      teamId: users.teamId,
+      teamName: teams.name,
+    })
+    .from(users)
+    .leftJoin(teams, eq(users.teamId, teams.id))
+    .where(
+      and(
+        eq(users.orgId, orgId),
+        inArray(users.role, ["manager", "hr"]),
+        eq(users.active, true),
+      ),
+    );
+
+  for (const a of approvers) {
+    const waiting = await listPendingFor(a as Viewer);
+    if (waiting.length === 0) continue;
+    drafts.push({
+      userId: a.id,
+      kind: "time_off_pending",
+      dedupeKey: `off:${waiting.length}:${waiting[0].id}`,
+      title: `휴가 승인 대기 ${waiting.length}건`,
+      body: waiting
+        .slice(0, 3)
+        .map((w) => `${w.userName} ${md(w.date, zone)} ${TIME_OFF_LABEL[w.kind]}`)
+        .join(" · "),
+      href: "/team",
+      periodStart: null,
+    });
+  }
+
+  /*
+   * 결정 결과는 신청자에게. 이건 상태가 아니라 사건이라 이 구조와 안 맞는다 —
+   * "최근 7일 안에 결정된 것"을 상태로 보고 그 기간이 지나면 사라지게 한다.
+   */
+  const recent = await db
+    .select({
+      id: timeOff.id,
+      userId: timeOff.userId,
+      date: timeOff.date,
+      kind: timeOff.kind,
+      status: timeOff.status,
+      decisionNote: timeOff.decisionNote,
+    })
+    .from(timeOff)
+    .where(
+      and(
+        eq(timeOff.orgId, orgId),
+        ne(timeOff.status, "pending"),
+        gte(
+          timeOff.decidedAt,
+          DateTime.fromJSDate(asOf).minus({ days: 7 }).toJSDate(),
+        ),
+      ),
+    );
+
+  for (const r of recent) {
+    const approved = r.status === "approved";
+    drafts.push({
+      userId: r.userId,
+      kind: "time_off_decided",
+      dedupeKey: `offresult:${r.id}:${r.status}`,
+      title: `${md(r.date, zone)} ${TIME_OFF_LABEL[r.kind as "full"]} 신청이 ${approved ? "승인되었습니다" : "반려되었습니다"}`,
+      body: approved
+        ? "소정근로에서 빠집니다."
+        : r.decisionNote || "사유가 적혀 있지 않습니다.",
+      href: "/records",
+      periodStart: null,
+    });
   }
 
   // ── 반영: 없는 건 만들고, 조건이 사라진 건 지운다 ──

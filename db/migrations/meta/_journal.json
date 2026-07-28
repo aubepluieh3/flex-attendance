@@ -71,6 +71,20 @@
       "when": 1785142993776,
       "tag": "0009_whole_ultimatum",
       "breakpoints": true
+    },
+    {
+      "idx": 10,
+      "version": "7",
+      "when": 1785203956070,
+      "tag": "0010_modern_mentallo",
+      "breakpoints": true
+    },
+    {
+      "idx": 11,
+      "version": "7",
+      "when": 1785204443410,
+      "tag": "0011_colossal_guardian",
+      "breakpoints": true
     }
   ]
 }

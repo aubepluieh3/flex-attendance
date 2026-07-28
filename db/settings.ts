@@ -3,6 +3,7 @@ import { DateTime } from "luxon";
 import { db } from "./client";
 import { holidays, orgs, timeOff, users, workDays } from "./schema";
 import { AccessDenied, loadOrgRules, type Viewer } from "./access";
+import { deductFor } from "./timeoff";
 import { recomputeWorkDays } from "./recompute";
 import { isPeriodClosed } from "./close";
 import { resolvePeriod } from "@/lib/attendance/period";
@@ -258,6 +259,7 @@ export async function listTimeOff(orgId: string, from: string, to: string) {
       kind: timeOff.kind,
       deductMinutes: timeOff.deductMinutes,
       reason: timeOff.reason,
+      status: timeOff.status,
       userName: users.name,
       employeeNo: users.employeeNo,
     })
@@ -308,13 +310,13 @@ export async function addTimeOff(
     );
   if (!target) throw new Error(`사번 ${input.employeeNo} 을 찾을 수 없습니다.`);
 
-  // 차감량은 스냅샷이다. 나중에 1일 소정근로가 바뀌어도 과거 휴가는 흔들리면 안 된다.
-  const full = rules.settlement.standardMinutesPerDay;
-  const deductMinutes =
-    input.kind === "half_am" || input.kind === "half_pm"
-      ? Math.round(full / 2)
-      : full;
-
+  /*
+   * HR 직접 등록은 즉시 승인이다.
+   *
+   * 승인 절차는 "본인이 자기 소정근로를 낮추는 것"을 막기 위한 것이고,
+   * HR 이 대신 넣는 건 이미 결정이 있었다는 뜻이다. 여기서 pending 으로
+   * 두면 HR 이 넣고 HR 이 다시 승인하는 무의미한 두 단계가 된다.
+   */
   await db
     .insert(timeOff)
     .values({
@@ -322,8 +324,15 @@ export async function addTimeOff(
       userId: target.id,
       date: day,
       kind: input.kind,
-      deductMinutes,
+      deductMinutes: deductFor(
+        input.kind,
+        rules.settlement.standardMinutesPerDay,
+      ),
       reason: input.reason.trim() || null,
+      status: "approved",
+      requestedBy: target.id,
+      decidedBy: viewer.id,
+      decidedAt: now(),
       createdBy: viewer.id,
     })
     .onConflictDoNothing();

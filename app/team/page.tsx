@@ -2,6 +2,8 @@ import Link from "next/link";
 import { DateTime } from "luxon";
 import { loadOrgRules } from "@/db/access";
 import { loadTeamRows } from "@/db/team";
+import { listPendingFor, TIME_OFF_LABEL } from "@/db/timeoff";
+import { teamAction } from "./actions";
 import { resolvePeriod } from "@/lib/attendance/period";
 import { now } from "@/lib/clock";
 import { requestViewer } from "../viewer";
@@ -23,9 +25,9 @@ function hm(minutes: number): string {
 export default async function TeamPage({
   searchParams,
 }: {
-  searchParams: Promise<{ period?: string }>;
+  searchParams: Promise<{ period?: string; msg?: string; err?: string }>;
 }) {
-  const { period } = await searchParams;
+  const { period, msg, err } = await searchParams;
   const viewer = await requestViewer("/team");
   const rules = await loadOrgRules(viewer.orgId);
   const zone = rules.attendance.timezone;
@@ -84,6 +86,7 @@ export default async function TeamPage({
    * 이미 하는 일이다. 목록은 특정 사람을 찾는 데 쓰이므로 이름순이 낫다.
    */
   const roster = [...rows].sort((a, b) => a.name.localeCompare(b.name));
+  const pending = await listPendingFor(viewer);
 
   const clock = (d: Date) =>
     DateTime.fromJSDate(d, { zone }).toFormat("HH:mm");
@@ -199,6 +202,70 @@ export default async function TeamPage({
             : "확인할 항목이 있는 사람이 없습니다."}
         </span>
       </p>
+
+      {(msg || err) && (
+        <section className="card">
+          <ul className="issues">
+            <li>
+              <span
+                className={`icon ${err ? "crit" : "warn"}`}
+                aria-hidden="true"
+              >
+                !
+              </span>
+              <span className="what">{err ?? msg}</span>
+            </li>
+          </ul>
+        </section>
+      )}
+
+      {/*
+        휴가 승인.
+        재실 요약보다 위에 둔다 — 다른 사람이 기다리고 있는 유일한 항목이다.
+      */}
+      {pending.length > 0 && (
+        <section className="card">
+          <h2>휴가 승인 대기 {pending.length}건</h2>
+          <ul className="offlist">
+            {pending.map((o) => (
+              <li key={o.id}>
+                <span className="d">
+                  {DateTime.fromISO(o.date, { zone }).toFormat("M월 d일")}
+                </span>
+                <span className="k">
+                  {o.userName} · {TIME_OFF_LABEL[o.kind]}
+                </span>
+                <span className="why">{o.reason ?? ""}</span>
+                <form action={teamAction} className="offdecide">
+                  <input type="hidden" name="offId" value={o.id} />
+                  <input type="hidden" name="period" value={range.start} />
+                  <input
+                    type="text"
+                    name="note"
+                    placeholder="반려 사유 (반려할 때만)"
+                    aria-label="반려 사유"
+                  />
+                  <button type="submit" name="op" value="approve">
+                    승인
+                  </button>
+                  <button
+                    type="submit"
+                    name="op"
+                    value="reject"
+                    className="pill"
+                  >
+                    반려
+                  </button>
+                </form>
+              </li>
+            ))}
+          </ul>
+          <p className="empty" style={{ marginTop: 10 }}>
+            승인하면 그 사람의 이번 정산기간 소정근로에서 빠집니다. 반려는 사유가
+            필요합니다.
+          </p>
+        </section>
+      )}
 
       {rows.length === 0 ? (
         <section className="card">

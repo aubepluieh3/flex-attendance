@@ -296,8 +296,20 @@ export function computePeriodSummary(
   const workedDates = new Set(
     counted.filter((d) => d.workMinutes > 0).map((d) => d.workDate),
   );
+  /*
+   * 휴가일에 근무 기록이 있으면 올린다 — 단 반차는 뺀다.
+   *
+   * 반차는 반나절 일하는 게 정상인데 걸리게 두면, 정직하게 반차를 신청한
+   * 사람만 매번 확인 대상이 된다. 그러면 아무도 반차를 신청하지 않는다.
+   * (자기신고에 불이익을 붙이는 설계)
+   */
   const timeOffConflicts = periodTimeOff
-    .filter((t) => workedDates.has(t.date))
+    .filter(
+      (t) =>
+        workedDates.has(t.date) &&
+        t.kind !== "half_am" &&
+        t.kind !== "half_pm",
+    )
     .map((t) => t.date)
     .sort();
 

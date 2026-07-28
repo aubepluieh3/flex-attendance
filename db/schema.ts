@@ -1,3 +1,4 @@
+import { sql } from "drizzle-orm";
 import type { AnyPgColumn } from "drizzle-orm/pg-core";
 import {
   pgTable,
@@ -69,6 +70,18 @@ export const timeOffKind = pgEnum("time_off_kind", [
   "half_pm",
   "unpaid",
 ]);
+/**
+ * 휴가 승인 상태.
+ *
+ * 휴가는 근태 보정과 성격이 다르다. 보정은 실제로 일한 것을 신고하는 것이고,
+ * 휴가는 근로 의무를 면제받는 것이라 소정근로가 줄어든다. 승인이 없으면
+ * 본인이 자기 목표를 낮출 수 있다. 그래서 approved 만 집계에 들어간다.
+ */
+export const timeOffStatus = pgEnum("time_off_status", [
+  "pending",
+  "approved",
+  "rejected",
+]);
 export const periodStatus = pgEnum("period_status", ["open", "closed"]);
 export const periodCloseAction = pgEnum("period_close_action", [
   "close",
@@ -81,6 +94,8 @@ export const notificationKind = pgEnum("notification_kind", [
   "period_closing",   // 마감 임박 · 아직 목표 미달
   "post_close_change",// 마감 후 값이 바뀜
   "team_review",      // 팀장: 팀에 확인 필요
+  "time_off_pending", // 팀장·HR: 휴가 승인 대기
+  "time_off_decided", // 본인: 휴가가 승인·반려됨
 ]);
 export const accessScope = pgEnum("access_scope", [
   "self",
@@ -467,6 +482,15 @@ export const timeOff = pgTable(
     kind: timeOffKind("kind").notNull(),
     deductMinutes: integer("deduct_minutes").notNull(),
     reason: text("reason"),
+    status: timeOffStatus("status").notNull().default("pending"),
+    /** 신청자. HR 대신 입력과 본인 신청을 구분한다 */
+    requestedBy: uuid("requested_by")
+      .notNull()
+      .references(() => users.id),
+    decidedBy: uuid("decided_by").references(() => users.id),
+    decidedAt: timestamp("decided_at", { withTimezone: true }),
+    /** 반려 사유. 이유 없이 반려하면 다시 신청할 근거가 없다 */
+    decisionNote: text("decision_note").notNull().default(""),
     createdBy: uuid("created_by")
       .notNull()
       .references(() => users.id),
@@ -474,7 +498,17 @@ export const timeOff = pgTable(
       .notNull()
       .defaultNow(),
   },
-  (t) => [uniqueIndex("time_off_user_date").on(t.userId, t.date)],
+  (t) => [
+    /*
+     * 반려된 건은 중복 검사에서 뺀다.
+     * 전체 unique 로 두면 한 번 반려당한 날짜는 다시 신청할 수 없고,
+     * 반려 이력을 지우지 않으려면 부분 인덱스가 필요하다.
+     */
+    uniqueIndex("time_off_user_date")
+      .on(t.userId, t.date)
+      .where(sql`${t.status} <> 'rejected'`),
+    index("time_off_status").on(t.orgId, t.status),
+  ],
 );
 
 /**

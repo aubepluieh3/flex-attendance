@@ -385,12 +385,14 @@ export default async function SettingsPage({
             {offFrom} ~ {offTo} 사이에 등록된 휴가가 없습니다.
           </p>
         ) : (
-          <table style={{ marginTop: 14 }}>
+          <div className="scroll-x" style={{ marginTop: 14 }}>
+          <table>
             <thead>
               <tr>
                 <th>날짜</th>
                 <th>사람</th>
                 <th>종류</th>
+                <th>상태</th>
                 <th>차감</th>
                 <th>사유</th>
                 <th />
@@ -402,7 +404,26 @@ export default async function SettingsPage({
                   <td>{t.date}</td>
                   <td>{t.userName}</td>
                   <td>{KIND_LABEL[t.kind]}</td>
-                  <td>{hours(t.deductMinutes)}시간</td>
+                  {/*
+                    승인 대기·반려는 소정근로에 반영되지 않는다. 상태를 안 보이면
+                    HR 이 "등록했는데 왜 집계가 안 바뀌나" 를 알 수 없다.
+                  */}
+                  <td>
+                    {t.status === "approved" ? (
+                      "승인"
+                    ) : (
+                      <span className="tag">
+                        {t.status === "pending" ? "승인 대기" : "반려"}
+                      </span>
+                    )}
+                  </td>
+                  <td>
+                    {t.status === "approved" ? (
+                      `${hours(t.deductMinutes)}시간`
+                    ) : (
+                      <span className="none">—</span>
+                    )}
+                  </td>
                   <td className="none">{t.reason ?? "—"}</td>
                   <td>
                     <form action={removeTimeOffAction}>
@@ -416,6 +437,7 @@ export default async function SettingsPage({
               ))}
             </tbody>
           </table>
+          </div>
         )}
       </section>
     </main>

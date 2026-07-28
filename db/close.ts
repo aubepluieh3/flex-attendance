@@ -62,6 +62,7 @@ async function summaryFor(
     .where(
       and(
         eq(timeOff.userId, userId),
+        eq(timeOff.status, "approved"),
         gte(timeOff.date, range.start),
         lte(timeOff.date, range.end),
       ),

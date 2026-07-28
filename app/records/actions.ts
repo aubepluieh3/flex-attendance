@@ -4,6 +4,14 @@ import { redirect } from "next/navigation";
 import { revalidatePath } from "next/cache";
 import { createAdjustment, revertAdjustment } from "@/db/adjust";
 import { closeSessionManually } from "@/db/checkin";
+import {
+  cancelTimeOff,
+  requestTimeOff,
+  TIME_OFF_LABEL,
+  type TimeOffKind,
+} from "@/db/timeoff";
+import { syncNotifications } from "@/db/notify";
+import { now } from "@/lib/clock";
 import { requestViewer } from "../viewer";
 import { rethrowControlFlow } from "../action-error";
 
@@ -41,6 +49,16 @@ export async function recordsAction(form: FormData) {
       const h = Math.floor(r.minutes / 60);
       const m = r.minutes % 60;
       query = `msg=${encodeURIComponent(`${r.workDate} 근무를 ${h}시간 ${m}분으로 마감했습니다.`)}`;
+    } else if (op === "requestOff") {
+      const r = await requestTimeOff(viewer, {
+        date: str(form, "offDate"),
+        kind: str(form, "kind") as TimeOffKind,
+        reason: str(form, "offReason"),
+      });
+      query = `msg=${encodeURIComponent(`${r.date} ${TIME_OFF_LABEL[r.kind]}를 신청했습니다. 승인되면 소정근로에서 빠집니다.`)}`;
+    } else if (op === "cancelOff") {
+      const r = await cancelTimeOff(viewer, str(form, "offId"));
+      query = `msg=${encodeURIComponent(`${r.date} 휴가 ${r.wasApproved ? "승인을 취소" : "신청을 취소"}했습니다.`)}`;
     } else {
       const minutes = str(form, "addedMinutes").trim();
       await createAdjustment(viewer, viewer.id, {
@@ -53,9 +71,13 @@ export async function recordsAction(form: FormData) {
       query = `msg=${encodeURIComponent(`${workDate} 기록을 보정했습니다.`)}`;
     }
 
+    // 휴가 신청도 알림 대상이다 (승인자가 팀 현황을 안 열면 방치된다)
+    await syncNotifications(viewer.orgId, now());
+
     revalidatePath("/records");
     revalidatePath("/");
     revalidatePath("/notifications");
+    revalidatePath("/team");
   } catch (e) {
     rethrowControlFlow(e);
     query = `err=${encodeURIComponent((e as Error).message)}`;
