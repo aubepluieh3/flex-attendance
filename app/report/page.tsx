@@ -2,9 +2,10 @@ import Link from "next/link";
 import { DateTime } from "luxon";
 import { loadOrgRules } from "@/db/access";
 import { loadPersonRows, loadTeamAggregates } from "@/db/report";
-import { resolvePeriod, shiftPeriod } from "@/lib/attendance/period";
+import { resolvePeriod } from "@/lib/attendance/period";
 import { now } from "@/lib/clock";
 import { requestViewer } from "../viewer";
+import { PeriodNav } from "../period-nav";
 import { hm } from "@/lib/format";
 
 export const dynamic = "force-dynamic";
@@ -25,12 +26,9 @@ export default async function ReportPage({
     weekStartDay: rules.weekStartDay,
     timezone: zone,
   };
-  const range = resolvePeriod(
-    period ?? DateTime.fromJSDate(asOf, { zone }).toISODate()!,
-    opts,
-  );
-  const prev = shiftPeriod(range, -1, opts);
-  const next = shiftPeriod(range, 1, opts);
+  const today = DateTime.fromJSDate(asOf, { zone }).toISODate()!;
+  const range = resolvePeriod(period ?? today, opts);
+  const isCurrent = range.start === resolvePeriod(today, opts).start;
 
   if (viewer.role !== "hr" && viewer.role !== "executive") {
     return (
@@ -66,10 +64,6 @@ export default async function ReportPage({
       ? await loadPersonRows(viewer, range, rules, asOf)
       : null;
 
-  const nav = (r: { start: string }, label: string) => (
-    <Link href={`/report?period=${r.start}`}>{label}</Link>
-  );
-
   return (
     <main className="page">
       <div className="head">
@@ -80,10 +74,15 @@ export default async function ReportPage({
         </span>
       </div>
       <p className="sub">
-        {nav(prev, "← 이전")} &nbsp;
-        {DateTime.fromISO(range.start, { zone }).toFormat("yyyy년 M월 d일")} ~{" "}
-        {DateTime.fromISO(range.end, { zone }).toFormat("M월 d일")} &nbsp;
-        {nav(next, "다음 →")}
+        {/* 다른 화면과 같은 알약을 쓴다. 여기만 맨 링크였다 */}
+        <PeriodNav
+          basePath="/report"
+          range={range}
+          kind={rules.settlementKind}
+          weekStartDay={rules.weekStartDay}
+          timezone={zone}
+          isCurrent={isCurrent}
+        />
         <br />
         <span className="dim">
           {viewer.role === "executive"

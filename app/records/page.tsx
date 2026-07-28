@@ -111,6 +111,13 @@ export default async function RecordsPage({
       <div className="head">
         <h1>내 기록 · 보정</h1>
         <span className="team">{viewer.teamName ?? rules.orgName}</span>
+        {/*
+          오른쪽 칩은 "이 화면에서 지금 알아야 할 상태"를 넣는 자리다.
+          관리 화면에서는 이름·역할(권한이 갈리므로), 기간을 보는 화면에서는
+          마감 여부. 이 화면은 마감되면 보정 폼이 전부 사라지는데 그 이유가
+          카드 안에만 있어서 위에서 안 보였다.
+        */}
+        {closed && <span className="chip">마감됨</span>}
       </div>
       <p className="sub">
         <PeriodNav

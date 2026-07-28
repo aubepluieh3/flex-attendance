@@ -16,21 +16,26 @@ import { resolvePeriod } from "@/lib/attendance/period";
 import type { DayFlag } from "@/lib/attendance/types";
 import { now } from "@/lib/clock";
 import { requestViewer } from "../../viewer";
+import { PeriodNav } from "../../period-nav";
 import {
   ADJUST_KIND_LABEL as KIND_LABEL,
   dowOf,
   FLAG_LABEL,
   hm,
+  ROLE_LABEL,
 } from "@/lib/format";
 
 export const dynamic = "force-dynamic";
 
 export default async function TeamMemberPage({
   params,
+  searchParams,
 }: {
   params: Promise<{ userId: string }>;
+  searchParams: Promise<{ period?: string }>;
 }) {
   const { userId } = await params;
+  const { period } = await searchParams;
   const viewer = await requestViewer(`/team/${userId}`);
   const rules = await loadOrgRules(viewer.orgId);
   const zone = rules.attendance.timezone;
@@ -49,11 +54,14 @@ export default async function TeamMemberPage({
   if (!target) notFound();
 
   const asOf = now();
-  const range = resolvePeriod(DateTime.fromJSDate(asOf, { zone }).toISODate()!, {
+  const opts = {
     kind: rules.settlementKind,
     weekStartDay: rules.weekStartDay,
     timezone: zone,
-  });
+  };
+  const today = DateTime.fromJSDate(asOf, { zone }).toISODate()!;
+  const range = resolvePeriod(period ?? today, opts);
+  const isCurrent = range.start === resolvePeriod(today, opts).start;
 
   // 권한 검사와 열람 로그는 loadWorkDays 안에서 일어난다
   let days;
@@ -118,13 +126,33 @@ export default async function TeamMemberPage({
     <main className="page">
       <div className="head">
         <h1>{target.name}</h1>
-        <span className="team">{target.teamName ?? "—"}</span>
-        <span className="chip">{target.employeeNo}</span>
+        {/*
+          사번은 제목 옆에 둔다. 오른쪽 칩은 다른 화면에서 "지금 누구로 보고
+          있나"를 말하는 자리라, 여기서 대상의 사번을 넣으면 뜻이 어긋난다.
+        */}
+        <span className="team">
+          {target.employeeNo} · {target.teamName ?? "—"}
+        </span>
+        <span className="chip">
+          {viewer.name} · {ROLE_LABEL[viewer.role]}
+        </span>
       </div>
       <p className="sub">
-        {DateTime.fromISO(range.start, { zone }).toFormat("M월 d일")} ~{" "}
-        {DateTime.fromISO(range.end, { zone }).toFormat("M월 d일")} ·{" "}
-        <Link href="/team">팀 현황으로</Link>
+        {/*
+          여기만 기간 이동이 없어서, 팀원의 지난주를 보려면 팀 현황으로 나가
+          기간을 바꾸고 다시 들어와야 했다. 다른 화면과 같은 알약을 쓴다.
+        */}
+        <PeriodNav
+          basePath={`/team/${userId}`}
+          range={range}
+          kind={rules.settlementKind}
+          weekStartDay={rules.weekStartDay}
+          timezone={zone}
+          isCurrent={isCurrent}
+        />
+        <span className="after-nav">
+          <Link href="/team">팀 현황으로</Link>
+        </span>
         <br />
         <span className="dim">
           이 조회는 열람 이력에 남습니다. 근태는 개인정보입니다.
@@ -167,8 +195,13 @@ export default async function TeamMemberPage({
             <thead>
               <tr>
                 <th>날짜</th>
-                <th>출근</th>
-                <th>퇴근</th>
+                {/*
+                  대시보드에서 고친 것과 같은 이유로 "출근/퇴근"이라고 쓰지
+                  않는다. 나눠 일한 날의 09시와 21시는 하루의 양끝일 뿐이고
+                  그 사이를 근무로 읽으면 안 된다.
+                */}
+                <th>첫 시작</th>
+                <th>마지막 종료</th>
                 <th>실근무</th>
                 <th>비고</th>
               </tr>
@@ -193,8 +226,17 @@ export default async function TeamMemberPage({
                           {d.status === "incomplete" && (
                             <span className="tag">미완료</span>
                           )}
+                          {d.status === "open" && (
+                            <span className="tag">근무 중</span>
+                          )}
                           {d.status === "adjusted" && (
                             <span className="tag">보정됨</span>
+                          )}
+                          {/* 나눠 일한 날은 팀장도 알아야 한다 */}
+                          {d.sessionCount > 1 && (
+                            <span className="tag">
+                              {d.sessionCount}번 나눠 근무
+                            </span>
                           )}
                           {d.flags.map((f) => (
                             <span className="tag" key={f}>
