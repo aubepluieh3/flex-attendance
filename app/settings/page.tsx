@@ -3,6 +3,7 @@ import { DateTime } from "luxon";
 import { listUsers, loadOrgRules } from "@/db/access";
 import { listHolidays, listTimeOff, ruleWarnings } from "@/db/settings";
 import { listErrors } from "@/db/errors";
+import { activeBatchCount } from "@/db/import-revoke";
 import { resolvePeriod, shiftPeriod } from "@/lib/attendance/period";
 import { now } from "@/lib/clock";
 import { requestViewer } from "../viewer";
@@ -71,6 +72,8 @@ export default async function SettingsPage({
   const holidayRows = await listHolidays(viewer.orgId);
   const people = await listUsers();
   const errors = await listErrors(viewer);
+  /** 아직 근태 파일을 한 번도 안 올렸으면 처음 설정 중으로 본다 */
+  const neverImported = (await activeBatchCount(viewer.orgId)) === 0;
 
   const opts = {
     kind: rules.settlementKind,
@@ -119,6 +122,48 @@ export default async function SettingsPage({
           </ul>
         </section>
       )}
+
+      {/*
+        처음 설정 순서.
+        순서를 틀려도 기술적으로는 복구되지만(파생 데이터라 재계산하면 된다),
+        문제는 HR 이 잘못된 숫자를 한 번 믿고 팀장에게 보고한 뒤에 바뀌는 것이다.
+        정산기간을 주↔월로 늦게 바꾸면 이미 찍힌 스냅샷과 기간 경계가 어긋난다.
+        db:bootstrap 도 이 순서를 출력하지만, 그걸 본 사람과 나중에 시스템을
+        물려받는 사람이 다르다.
+
+        아직 CSV 를 한 번도 안 올렸으면 펼쳐 두고, 그 뒤로는 접는다 —
+        항상 띄우면 소음이 된다.
+      */}
+      <details className="fold" open={neverImported} style={{ marginBottom: 14 }}>
+        <summary>처음 설정 순서</summary>
+        <div className="scroll-x">
+          <ol className="steps">
+            <li>
+              <b>여기(근태 규칙)를 먼저 맞춥니다.</b> 정산기간·의무근로시간대·
+              휴게·1일 상한은 <b>서면합의 사항</b>입니다. 지금 값은 예시일 뿐이니
+              그대로 쓰면 안 됩니다.
+            </li>
+            <li>
+              <b>공휴일</b>을 넣습니다. 소정근로 계산에서 빠집니다.
+            </li>
+            <li>
+              <b>사용자 관리</b>에서 구성원을 추가하고 팀을 배정합니다. 사번은
+              CSV 의 사번과 정확히 같아야 매칭됩니다.
+            </li>
+            <li>
+              <b>그다음에</b> 근태 파일을 올립니다.
+            </li>
+          </ol>
+          <p className="empty" style={{ marginTop: 10 }}>
+            순서를 바꿔도 되돌릴 수는 있습니다 — 규칙을 고치면 전 직원 집계가 다시
+            계산됩니다. 다만 <b>한 번 본 숫자가 나중에 전부 바뀝니다.</b> 그 숫자로
+            팀장에게 보고했다면 다시 설명해야 합니다.
+            <br />
+            정산기간(주↔월)은 특히 늦게 바꾸지 마세요. 이미 마감된 기간의 공식
+            기록은 그 기간 기준으로 얼어 있어서 경계가 어긋납니다.
+          </p>
+        </div>
+      </details>
 
       {warnings.length > 0 && (
         <section className="card">

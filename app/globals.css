@@ -977,6 +977,26 @@ button.danger:hover {
   color: var(--crit-ink);
   filter: none;
 }
+/* 처음 설정 순서 — 번호가 순서라는 뜻을 갖는다 */
+.steps {
+  margin: 12px 0 0;
+  padding-left: 22px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  font-size: 13.5px;
+  color: var(--ink-2);
+  line-height: 1.7;
+}
+.steps > li::marker {
+  color: var(--ink-3);
+  font-weight: 700;
+}
+.steps b {
+  color: var(--ink);
+  font-weight: 650;
+}
+
 /*
  * ── 확인 단계 ──
  *
