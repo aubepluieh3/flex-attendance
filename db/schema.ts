@@ -96,6 +96,7 @@ export const notificationKind = pgEnum("notification_kind", [
   "team_review",      // 팀장: 팀에 확인 필요
   "time_off_pending", // 팀장·HR: 휴가 승인 대기
   "time_off_decided", // 본인: 휴가가 승인·반려됨
+  "password_reset_pending", // HR: 재설정 요청 — 처리 전에는 그 사람이 로그인 못 한다
 ]);
 export const accessScope = pgEnum("access_scope", [
   "self",
@@ -664,6 +665,44 @@ export const loginAttempts = pgTable(
     index("login_attempts_employee").on(t.employeeNo, t.createdAt),
     index("login_attempts_ip").on(t.ip, t.createdAt),
   ],
+);
+
+export const resetRequestStatus = pgEnum("reset_request_status", [
+  "pending",
+  "done",
+  "dismissed",
+]);
+
+/**
+ * 비밀번호 재설정 요청.
+ *
+ * 로그인하지 못하는 사람이 남기고 HR 이 처리한다. 메일 발송 수단이 없어서
+ * 셀프서비스 재설정을 만들 수 없는데, 사번만으로 즉시 재설정하게 하면
+ * 사번을 아는 누구나 남의 계정을 초기화할 수 있다 — 사번은 사원증·CSV 에
+ * 있는 준공개 정보다. 그래서 **사람이 승인**하는 자리를 둔다.
+ *
+ * IP 를 저장하지 않는다. 남용은 "한 사람에게 pending 은 하나"로 막고, 그
+ * 이상은 HR 이 무시로 정리한다. 안 담으면 파기 규칙도 필요 없다.
+ *
+ * 요청이 사용자를 참조하므로, 없는 사번으로는 행이 만들어지지 않는다.
+ * 다만 화면은 존재 여부와 무관하게 같은 말을 해야 한다 (사번 열거 방지).
+ */
+export const passwordResetRequests = pgTable(
+  "password_reset_requests",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    userId: uuid("user_id")
+      .notNull()
+      .references(() => users.id),
+    status: resetRequestStatus("status").notNull().default("pending"),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+    /** 처리한 HR. 무시도 처리다 */
+    decidedBy: uuid("decided_by").references(() => users.id),
+    decidedAt: timestamp("decided_at", { withTimezone: true }),
+  },
+  (t) => [index("reset_requests_user").on(t.userId, t.status)],
 );
 
 /**

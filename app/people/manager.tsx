@@ -13,14 +13,25 @@ const ROLES = [
 
 type Team = { id: string; name: string; parentId: string | null };
 
+/** 비밀번호 재설정 요청 한 건 */
+type ResetRequest = {
+  id: string;
+  userId: string;
+  name: string;
+  employeeNo: string;
+  waited: string;
+};
+
 export function PeopleManager({
   people,
   teams,
   viewerId,
+  resetRequests,
 }: {
   people: PersonRow[];
   teams: Team[];
   viewerId: string;
+  resetRequests: ResetRequest[];
 }) {
   const [state, action, pending] = useActionState<PeopleState, FormData>(
     peopleAction,
@@ -68,6 +79,80 @@ export function PeopleManager({
             다시 볼 수 없습니다. 놓치면 다시 초기화해야 합니다. 받은 사람은 로그인
             후 <code>내 계정</code>에서 비밀번호를 바꿔야 합니다.
           </p>
+        </section>
+      )}
+
+      {/*
+        비밀번호 재설정 요청.
+        맨 위에 둔다 — 요청한 사람은 그동안 앱을 아예 쓸 수 없다. 사용자 목록
+        아래에 두면 HR 이 스크롤하지 않아서 요청이 며칠씩 방치된다.
+      */}
+      {resetRequests.length > 0 && (
+        <section className="card">
+          <h2>비밀번호 재설정 요청 {resetRequests.length}건</h2>
+          <p className="sub" style={{ margin: "0 0 10px" }}>
+            <span className="dim">
+              로그인하지 못하는 사람이 남긴 요청입니다. 초기화하면 임시
+              비밀번호가 한 번 표시되니 사내에서 직접 전달하세요.
+            </span>
+          </p>
+          <ul className="issues">
+            {resetRequests.map((r) => (
+              <li key={r.id}>
+                <span className="icon warn" aria-hidden="true">
+                  !
+                </span>
+                <span>
+                  <span className="what">
+                    {r.name} · {r.employeeNo}
+                  </span>{" "}
+                  <span className="dim">{r.waited}</span>
+                  <br />
+                  {/*
+                    초기화는 사용자 목록의 그것과 같은 일을 한다 — 기존 비밀번호가
+                    즉시 못 쓰게 되고 로그인이 전부 끊긴다. 요청이 있다는 것만으로
+                    한 번의 클릭으로 실행되게 두면, 목록 쪽에 게이트를 둔 이유가
+                    무의미해진다. 같은 게이트를 쓴다.
+                  */}
+                  <details className="confirm">
+                    <summary>비밀번호 초기화…</summary>
+                    <div className="box">
+                      <span className="why">
+                        {r.name} 의 기존 비밀번호가 즉시 못 쓰게 되고 로그인도
+                        모두 끊깁니다. 임시 비밀번호는 <b>이 화면에 한 번만</b>{" "}
+                        보이니 바로 전달해야 합니다.
+                      </span>
+                      <form action={action} className="inline">
+                        <input type="hidden" name="op" value="reset" />
+                        <input type="hidden" name="userId" value={r.userId} />
+                        <input type="hidden" name="name" value={r.name} />
+                        <input
+                          type="hidden"
+                          name="employeeNo"
+                          value={r.employeeNo}
+                        />
+                        <button
+                          type="submit"
+                          className="danger"
+                          disabled={pending}
+                        >
+                          네, 초기화합니다
+                        </button>
+                      </form>
+                    </div>
+                  </details>
+                  {/* 무시는 되돌릴 수 있다 — 그 사람이 다시 요청하면 새로 올라온다 */}
+                  <form action={action} className="inline">
+                    <input type="hidden" name="op" value="dismissReset" />
+                    <input type="hidden" name="requestId" value={r.id} />
+                    <button type="submit" disabled={pending}>
+                      무시
+                    </button>
+                  </form>
+                </span>
+              </li>
+            ))}
+          </ul>
         </section>
       )}
 

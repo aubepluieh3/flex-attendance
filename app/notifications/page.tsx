@@ -16,6 +16,7 @@ const KIND_TONE: Record<string, "warn" | "crit"> = {
   team_review: "warn",
   time_off_pending: "warn",
   time_off_decided: "warn",
+  password_reset_pending: "warn",
 };
 
 export default async function NotificationsPage() {

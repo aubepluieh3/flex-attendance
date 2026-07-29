@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { useActionState } from "react";
 import { loginAction, type LoginState } from "./actions";
 
@@ -86,13 +87,14 @@ export function LoginForm({
                   <span className="what">{state.message}</span>
                   <br />
                   {/*
-                    막힌 사람에게 다음 행동을 준다. 셀프서비스 재설정 화면은
-                    없다 (메일 발송 수단이 없고, 드문 상황에 상시 공격면을
-                    여는 셈이 된다) — 그래서 사람에게 보낸다.
+                    막힌 사람에게 다음 행동을 준다. 즉시 재설정이 아니라 요청을
+                    남기는 화면으로 보낸다 — 메일 발송 수단이 없어서 사번만으로
+                    재설정하게 하면 사번을 아는 누구나 남의 계정을 초기화한다.
                   */}
                   <span className="why">
-                    비밀번호를 잊었다면 HR에 초기화를 요청하세요. 이 화면에서
-                    직접 재설정할 수는 없습니다.
+                    비밀번호를 잊었다면{" "}
+                    <Link href="/login/reset">재설정을 요청</Link>하세요. HR이
+                    확인한 뒤 임시 비밀번호를 발급합니다.
                   </span>
                 </span>
               </li>

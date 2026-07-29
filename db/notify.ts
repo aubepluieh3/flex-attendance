@@ -1,7 +1,13 @@
 import { and, asc, desc, eq, gte, inArray, isNull, ne, sql } from "drizzle-orm";
 import { DateTime } from "luxon";
 import { db } from "./client";
-import { notifications, teams, timeOff, users } from "./schema";
+import {
+  notifications,
+  passwordResetRequests,
+  teams,
+  timeOff,
+  users,
+} from "./schema";
 import { loadOrgRules, type OrgRules, type Viewer } from "./access";
 import { isPeriodClosed, loadPeriodState } from "./close";
 import { loadTeamRows } from "./team";
@@ -35,7 +41,8 @@ type Draft = {
     | "post_close_change"
     | "team_review"
     | "time_off_pending"
-    | "time_off_decided";
+    | "time_off_decided"
+    | "password_reset_pending";
   dedupeKey: string;
   title: string;
   body: string;
@@ -314,6 +321,49 @@ export async function syncNotifications(
       href: "/team",
       periodStart: null,
     });
+  }
+
+  /*
+   * 비밀번호 재설정 요청 → HR.
+   *
+   * 알림 항목을 늘리는 건 이 저장소가 경계하는 방향이지만 여기는 넣는다 —
+   * 요청한 사람은 그동안 **앱을 아예 쓸 수 없다.** HR 이 사용자 관리를 열지
+   * 않으면 요청이 며칠 방치되고, 그러면 이 기능 자체가 무의미하다.
+   * 처리하면(초기화든 무시든) 사라진다.
+   */
+  const resetPending = await db
+    .select({
+      id: passwordResetRequests.id,
+      name: users.name,
+      employeeNo: users.employeeNo,
+    })
+    .from(passwordResetRequests)
+    .innerJoin(users, eq(passwordResetRequests.userId, users.id))
+    .where(
+      and(
+        eq(passwordResetRequests.status, "pending"),
+        eq(users.orgId, orgId),
+      ),
+    )
+    .orderBy(asc(passwordResetRequests.createdAt));
+
+  if (resetPending.length > 0) {
+    const hrs = approvers.filter((a) => a.role === "hr");
+    for (const hr of hrs) {
+      drafts.push({
+        userId: hr.id,
+        kind: "password_reset_pending",
+        dedupeKey: `pwreset:${resetPending.length}:${resetPending[0].id}`,
+        title: `비밀번호 재설정 요청 ${resetPending.length}건`,
+        body:
+          resetPending
+            .slice(0, 3)
+            .map((r) => `${r.name} ${r.employeeNo}`)
+            .join(" · ") + " — 처리 전에는 그 사람이 로그인할 수 없습니다.",
+        href: "/people",
+        periodStart: null,
+      });
+    }
   }
 
   /*

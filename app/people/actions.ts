@@ -10,6 +10,7 @@ import {
   setRole,
   setTeam,
 } from "@/db/people";
+import { closeRequestsFor, closeResetRequest } from "@/db/reset-requests";
 import type { Role } from "@/db/access";
 import { requestViewer } from "../viewer";
 import { reportActionError, str } from "../action-error";
@@ -61,6 +62,9 @@ export async function peopleAction(
       }
       case "reset": {
         const { tempPassword } = await resetPassword(viewer, userId);
+        // 초기화하면 그 사람의 대기 중인 요청은 해결된 것이다. 안 닫으면
+        // 목록에 남아서 HR 이 같은 사람을 두 번 초기화한다.
+        await closeRequestsFor(viewer, userId);
         result = {
           message:
             "비밀번호를 초기화했습니다. 그 사람의 기존 로그인은 모두 끊겼습니다.",
@@ -69,6 +73,14 @@ export async function peopleAction(
             employeeNo: str(form, "employeeNo"),
             password: tempPassword,
           },
+        };
+        break;
+      }
+      case "dismissReset": {
+        await closeResetRequest(viewer, str(form, "requestId"), "dismissed");
+        result = {
+          message:
+            "요청을 무시했습니다. 그 사람이 다시 요청하면 목록에 새로 올라옵니다.",
         };
         break;
       }

@@ -1,0 +1,13 @@
+CREATE TYPE "public"."reset_request_status" AS ENUM('pending', 'done', 'dismissed');--> statement-breakpoint
+CREATE TABLE "password_reset_requests" (
+	"id" uuid PRIMARY KEY DEFAULT gen_random_uuid() NOT NULL,
+	"user_id" uuid NOT NULL,
+	"status" "reset_request_status" DEFAULT 'pending' NOT NULL,
+	"created_at" timestamp with time zone DEFAULT now() NOT NULL,
+	"decided_by" uuid,
+	"decided_at" timestamp with time zone
+);
+--> statement-breakpoint
+ALTER TABLE "password_reset_requests" ADD CONSTRAINT "password_reset_requests_user_id_users_id_fk" FOREIGN KEY ("user_id") REFERENCES "public"."users"("id") ON DELETE no action ON UPDATE no action;--> statement-breakpoint
+ALTER TABLE "password_reset_requests" ADD CONSTRAINT "password_reset_requests_decided_by_users_id_fk" FOREIGN KEY ("decided_by") REFERENCES "public"."users"("id") ON DELETE no action ON UPDATE no action;--> statement-breakpoint
+CREATE INDEX "reset_requests_user" ON "password_reset_requests" USING btree ("user_id","status");

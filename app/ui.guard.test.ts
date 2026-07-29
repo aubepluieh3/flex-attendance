@@ -89,6 +89,36 @@ describe("되돌리기 어려운 행동은 한 번의 클릭으로 실행되지 
       "danger 버튼을 details.confirm 안에 두거나 required 입력을 요구하세요",
     ).toEqual([]);
   });
+
+  /*
+   * 위 검사에 구멍이 있었다 — className="danger" 를 기준으로 삼으니, 클래스를
+   * 안 붙이면 그냥 통과한다. 비밀번호 재설정 요청 카드를 만들면서 실제로
+   * 통과했다. 사용자 목록의 초기화 버튼은 게이트 뒤에 있는데 요청 카드의
+   * 초기화 버튼은 한 번의 클릭으로 실행됐다. 같은 일을 하는 버튼이다.
+   *
+   * 그래서 스타일이 아니라 **보내는 op** 를 기준으로 한 번 더 본다.
+   * 되돌릴 수 없는 op 를 여기 적어두면 화면을 새로 만들 때도 걸린다.
+   */
+  const DANGEROUS_OPS = ["reset"];
+
+  it("되돌릴 수 없는 op 를 보내는 폼은 게이트 뒤에 있다", () => {
+    const bad: string[] = [];
+    for (const { path, src } of files) {
+      const hits = findLines(src, (l, i, lines) => {
+        const m = l.match(/name="op"\s+value="([a-zA-Z]+)"/);
+        if (!m || !DANGEROUS_OPS.includes(m[1]!)) return false;
+        const above = lines.slice(Math.max(0, i - 30), i);
+        const gated = above.some((p) => p.includes('className="confirm"'));
+        const needsInput = above.some((p) => /\brequired\b/.test(p));
+        return !gated && !needsInput;
+      });
+      for (const n of hits) bad.push(`${path}:${n}`);
+    }
+    expect(
+      bad,
+      `${DANGEROUS_OPS.join("·")} op 는 details.confirm 안에 두거나 required 입력을 요구하세요`,
+    ).toEqual([]);
+  });
 });
 
 describe("서버 액션은 오류를 기록한다", () => {
