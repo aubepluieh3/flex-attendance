@@ -1,4 +1,5 @@
 import { and, asc, eq, gte, inArray, lte } from "drizzle-orm";
+import { DateTime } from "luxon";
 import { db } from "./client";
 import { accessLogs, teams, timeOff, users, workDays } from "./schema";
 import { AccessDenied, type OrgRules, type Viewer } from "./access";
@@ -241,6 +242,15 @@ export async function exportCsv(
     periodEnd: range.end,
   });
 
+  /*
+   * 주평균은 분모가 기간 전체 주수라 기간이 끝나기 전에는 뜻이 없다.
+   * 진행 중인 기간을 내보내면 전원이 한도보다 한참 낮게 찍히고, 그 파일이
+   * 사내에 돌아다니면서 "문제 없음"의 근거가 된다. 끝난 기간에만 채운다.
+   */
+  const periodEnded =
+    DateTime.fromJSDate(asOf, { zone: rules.attendance.timezone }).toISODate()! >
+    range.end;
+
   const header = [
     "사번",
     "이름",
@@ -252,7 +262,7 @@ export async function exportCsv(
     "야간(분)",
     "휴일근무(분)",
     "법정초과(분)",
-    "주평균(분)",
+    periodEnded ? "주평균(분)" : "주평균(분, 기간 말 확정)",
     "퇴근기록없음(일)",
     "규정확인(건)",
     "주52시간초과",
@@ -278,7 +288,7 @@ export async function exportCsv(
         s.nightMinutes,
         s.holidayMinutes,
         s.overtimeMinutes,
-        Math.round(s.avgWeeklyMinutes),
+        periodEnded ? Math.round(s.avgWeeklyMinutes) : "",
         s.incompleteDates.length,
         s.flaggedDates.length,
         s.exceedsAvgWeeklyLimit ? "Y" : "N",

@@ -242,6 +242,12 @@ export async function loadTeamRows(
     const review = {
       incomplete: summary.incompleteDates.length,
       violations: summary.flaggedDates.length + summary.timeOffConflicts.length,
+      /*
+       * 확정 초과만 본다. summary.willExceedAvgWeeklyLimit(예상)을 여기에
+       * 넣지 말 것 — 예상 위법이 팀장 화면에 뜨면 지목된 사람이 줄이는 게
+       * 근무가 아니라 기록일 수 있다. 예상은 본인 화면에만 둔다.
+       * (app/ui.guard.test.ts 가 검사한다)
+       */
       exceedsLegalLimit: summary.exceedsAvgWeeklyLimit,
       adjustmentMinutes,
       adjustmentOverThreshold,

@@ -110,6 +110,53 @@ describe("서버 액션은 오류를 기록한다", () => {
   });
 });
 
+describe("예상 한도 초과는 본인 화면에만 둔다", () => {
+  /*
+   * 확정 초과(exceedsAvgWeeklyLimit)는 "남은 날을 전부 쉬어도 되돌릴 수 없다"는
+   * 뜻이라 관리자도 알아야 한다. 예상(willExceedAvgWeeklyLimit)은 다르다 —
+   * 팀장·HR 화면에 예상 위법이 뜨면 지목된 사람이 줄이는 게 근무가 아니라
+   * 기록일 수 있다. 자기신고에 불이익을 붙이는 설계와 같은 종류다.
+   *
+   * 문장으로 적어두면 다음에 "팀장도 미리 알면 좋지 않나"로 새기 쉬워서
+   * 검사로 옮긴다. 뒤집을 일이 생기면 이 테스트를 지우는 게 그 결정이다.
+   */
+  const MANAGER_FACING = [
+    "app/team/page.tsx",
+    "app/team/[userId]/page.tsx",
+    "app/report/page.tsx",
+    "db/team.ts",
+    "db/report.ts",
+  ];
+  const PROJECTION = ["willExceedAvgWeeklyLimit", "projectedAvgWeeklyMinutes"];
+
+  /** 규칙을 설명하는 주석에도 필드 이름이 나오므로 코드만 본다 (clock guard 와 같은 방식) */
+  const codeOf = (path: string) =>
+    readFileSync(path, "utf8")
+      .replace(/\/\*[\s\S]*?\*\//g, "")
+      .replace(/(^|[^:])\/\/.*$/gm, "$1");
+
+  it("관리자 화면은 예상값을 읽지 않는다", () => {
+    const bad: string[] = [];
+    for (const path of MANAGER_FACING) {
+      const src = codeOf(path);
+      for (const field of PROJECTION) {
+        if (src.includes(field)) bad.push(`${path}: ${field}`);
+      }
+    }
+    expect(bad, "예상 한도 초과는 본인 화면(app/page.tsx)에만 둡니다").toEqual(
+      [],
+    );
+  });
+
+  it("본인 화면은 예상값을 읽는다", () => {
+    // 위 검사만 두면 필드를 아무 데서도 안 쓰는 상태로도 통과한다
+    const src = codeOf("app/page.tsx");
+    for (const field of PROJECTION) {
+      expect(src, `app/page.tsx 가 ${field} 를 쓰지 않는다`).toContain(field);
+    }
+  });
+});
+
 describe("알림 종류를 늘리면 화면 표시도 늘린다", () => {
   /*
    * 휴가 알림 두 종류를 넣을 때 KIND_TONE 을 빠뜨렸다. 빠뜨리면 색이

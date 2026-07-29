@@ -29,6 +29,12 @@ export default async function ReportPage({
   const today = DateTime.fromJSDate(asOf, { zone }).toISODate()!;
   const range = resolvePeriod(period ?? today, opts);
   const isCurrent = range.start === resolvePeriod(today, opts).start;
+  /*
+   * 주평균은 분모가 기간 전체 주수라 기간이 끝나기 전에는 뜻이 없다.
+   * 진행 중인 기간에 200명 전원의 낮은 값을 표에 채우면, 그걸 보고
+   * "우리 팀은 여유 있다"로 읽는다. 끝난 기간에만 숫자를 쓴다.
+   */
+  const periodEnded = today > range.end;
 
   if (viewer.role !== "hr" && viewer.role !== "executive") {
     return (
@@ -167,7 +173,7 @@ export default async function ReportPage({
                     <th>팀</th>
                     <th>실근무</th>
                     <th>소정근로</th>
-                    <th>주 평균</th>
+                    <th>주 평균{periodEnded ? "" : " (기간 말)"}</th>
                     <th>법정초과</th>
                     <th>확인</th>
                   </tr>
@@ -182,7 +188,9 @@ export default async function ReportPage({
                       <td className="none">{p.teamName ?? "—"}</td>
                       <td>{hm(p.summary.workedMinutes)}</td>
                       <td className="none">{hm(p.summary.targetMinutes)}</td>
-                      <td>{hm(p.summary.avgWeeklyMinutes)}</td>
+                      <td>
+                        {periodEnded ? hm(p.summary.avgWeeklyMinutes) : "—"}
+                      </td>
                       <td>
                         {p.summary.overtimeMinutes
                           ? hm(p.summary.overtimeMinutes)

@@ -100,12 +100,35 @@ export type PeriodSummary = {
   projectedMinutes: number;
   paceStatus: PaceStatus;
 
-  /** 정산기간 평균 주 근로시간 */
+  /**
+   * 정산기간 평균 주 근로시간.
+   *
+   * 분모는 **기간 전체** 주수다. 기간 중에는 분자만 진행 중이므로 이 값은
+   * 기간이 끝나기 전에는 뜻이 없다 — 3월 첫 주에 70시간을 일해도 15시간대로
+   * 나온다. 관리자 화면에 기간 중 이 값을 그대로 보여주면 안심시킨다.
+   * 진행 중에 사람에게 보여줄 값은 projectedAvgWeeklyMinutes 쪽이다.
+   */
   avgWeeklyMinutes: number;
   /** 정산기간 총 법정근로시간을 넘은 분 = 연장근로 */
   overtimeMinutes: number;
-  /** 평균 주 52시간 초과 — 위법 소지 */
+  /**
+   * 평균 주 52시간 초과 — 위법 소지.
+   *
+   * 기간 중에 true 가 되면 "남은 날을 전부 쉬어도 되돌릴 수 없다"는 뜻이다.
+   * 정확하지만 늦다. 그 앞 구간은 willExceedAvgWeeklyLimit 가 맡는다.
+   */
   exceedsAvgWeeklyLimit: boolean;
+  /** 지금 페이스가 이어질 때 기간 말 주평균. 52시간과 직접 비교할 수 있는 값. */
+  projectedAvgWeeklyMinutes: number;
+  /**
+   * 남은 영업일을 **소정근로만** 해도 한도를 넘는다.
+   *
+   * 페이스 외삽이 아니라 하한이다 — "며칠 지나야 경고할지" 같은 임의 문턱이
+   * 필요 없고, 반박도 되지 않는다. 외삽보다 늦게, 확정보다 이르게 켜진다.
+   */
+  willExceedAvgWeeklyLimit: boolean;
+  /** 남은 영업일에 예정된 소정근로 (승인된 휴가는 빼고) */
+  remainingScheduledMinutes: number;
 
   /** 확인 필요 */
   incompleteDates: string[];
@@ -299,6 +322,45 @@ export function computePeriodSummary(
   );
   const exceedsAvgWeeklyLimit = avgWeeklyMinutes > rules.maxAvgWeeklyMinutes;
 
+  /*
+   * 한도 초과를 기간이 끝나기 전에 알린다.
+   *
+   * exceedsAvgWeeklyLimit 은 "이미 되돌릴 수 없다"를 뜻하므로 정확하지만 늦다.
+   * 3월에 매일 14시간 일하면 3월 24일에야 켜지고, 그때는 남은 영업일을 전부
+   * 쉬어도 위법이다. 그 사이 구간을 두 값으로 채운다 —
+   *
+   *   projectedAvgWeeklyMinutes  지금 페이스가 이어질 때의 기간 말 주평균 (중립 정보)
+   *   willExceedAvgWeeklyLimit   남은 날을 소정근로만 해도 넘는가 (경고)
+   *
+   * 뒤쪽은 외삽이 아니라 하한이라 임의 문턱이 필요 없다. 대신 남은 영업일에
+   * 승인된 휴가가 있으면 그날 몫을 뺀다. 안 빼면 월말에 휴가를 낸 사람이
+   * 경고를 맞는다 — 정직한 신고에 불이익을 붙이는 쪽이 된다.
+   */
+  const remainingBusinessDates =
+    paceCutoff === null
+      ? businessDates
+      : businessDates.filter((d) => d > paceCutoff);
+
+  const deductByDate = new Map<string, number>();
+  for (const t of periodTimeOff) {
+    deductByDate.set(t.date, (deductByDate.get(t.date) ?? 0) + t.deductMinutes);
+  }
+
+  const remainingScheduledMinutes = remainingBusinessDates.reduce(
+    (sum, date) =>
+      sum +
+      Math.max(
+        0,
+        rules.standardMinutesPerDay - (deductByDate.get(date) ?? 0),
+      ),
+    0,
+  );
+
+  const limitTotalMinutes = weeks * rules.maxAvgWeeklyMinutes;
+  const willExceedAvgWeeklyLimit =
+    workedMinutes + remainingScheduledMinutes > limitTotalMinutes;
+  const projectedAvgWeeklyMinutes = weeks > 0 ? projectedMinutes / weeks : 0;
+
   // ── 확인 필요 ──
   const incompleteDates = periodDays
     .filter((d) => d.status === "incomplete")
@@ -349,7 +411,7 @@ export function computePeriodSummary(
     nightMinutes,
     holidayMinutes,
     elapsedBusinessDays: elapsedBusinessDates.length,
-    remainingBusinessDays: businessDates.length - elapsedBusinessDates.length,
+    remainingBusinessDays: remainingBusinessDates.length,
     elapsedTargetMinutes,
     pacedWorkedMinutes,
     projectedMinutes,
@@ -357,6 +419,9 @@ export function computePeriodSummary(
     avgWeeklyMinutes,
     overtimeMinutes,
     exceedsAvgWeeklyLimit,
+    projectedAvgWeeklyMinutes,
+    willExceedAvgWeeklyLimit,
+    remainingScheduledMinutes,
     incompleteDates,
     flaggedDates,
     timeOffConflicts,

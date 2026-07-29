@@ -581,3 +581,135 @@ describe("마감 — 확정된 과거가 조용히 바뀌지 않게", () => {
     expect(diff.deltas.targetMinutes).toBe(-8 * 60);
   });
 });
+
+// ─────────────────────────────────────────────────────────────
+/**
+ * 2026년 3월 정산 (3/1 일요일 ~ 3/31, 4.43주, 영업일 22일).
+ *
+ * 확정 초과(exceedsAvgWeeklyLimit)는 분모가 기간 전체 주수라 늦게 켜진다.
+ * 매일 14시간을 일하면 3/24 무렵이고, 그때는 남은 영업일을 전부 쉬어도
+ * 위법이다. 그 앞 구간을 예상 주평균과 하한 경고가 맡는다.
+ */
+const month = (o: {
+  days?: ComputedDay[];
+  timeOff?: TimeOffEntry[];
+  asOf: string;
+}) => ({
+  periodStart: "2026-03-01",
+  periodEnd: "2026-03-31",
+  days: o.days ?? [],
+  timeOff: o.timeOff ?? [],
+  asOf: kst(o.asOf),
+});
+
+/** 3/2 부터 연속 영업일에 같은 시간씩 (주말은 건너뛴다) */
+const businessDaysFrom = (count: number, minutes: number): ComputedDay[] => {
+  const out: ComputedDay[] = [];
+  let cursor = DateTime.fromISO("2026-03-02", { zone: "Asia/Seoul" });
+  while (out.length < count) {
+    if (cursor.weekday <= 5) out.push(d(cursor.toISODate()!, minutes));
+    cursor = cursor.plus({ days: 1 });
+  }
+  return out;
+};
+
+describe("한도 초과를 기간이 끝나기 전에 알린다", () => {
+  it("첫 주 70시간 — 확정 초과는 아니지만 예상 주평균이 한도를 넘는다", () => {
+    const s = computePeriodSummary(
+      month({ days: businessDaysFrom(5, 14 * 60), asOf: "2026-03-07T10:00" }),
+      base,
+    );
+
+    expect(s.workedMinutes).toBe(70 * 60);
+    // 분모가 기간 전체(4.43주)라 15시간대로 나온다 — 이 값만 보면 여유롭다
+    expect(Math.round(s.avgWeeklyMinutes / 60)).toBe(16);
+    expect(s.exceedsAvgWeeklyLimit).toBe(false);
+
+    // 같은 실적을 기간 말로 투사하면 69시간대
+    expect(Math.round(s.projectedAvgWeeklyMinutes / 60)).toBe(70);
+    expect(s.projectedAvgWeeklyMinutes).toBeGreaterThan(base.maxAvgWeeklyMinutes);
+
+    // 아직 하한에는 안 걸린다 — 남은 17영업일을 소정근로만 하면 206시간
+    expect(s.remainingBusinessDays).toBe(17);
+    expect(s.remainingScheduledMinutes).toBe(17 * 8 * 60);
+    expect(s.willExceedAvgWeeklyLimit).toBe(false);
+  });
+
+  it("10영업일 뒤 140시간 — 소정근로만 더해도 넘으므로 경고", () => {
+    const s = computePeriodSummary(
+      month({ days: businessDaysFrom(10, 14 * 60), asOf: "2026-03-16T10:00" }),
+      base,
+    );
+
+    expect(s.workedMinutes).toBe(140 * 60);
+    // 확정 초과는 아직 아니다 (그건 3/24 무렵)
+    expect(s.exceedsAvgWeeklyLimit).toBe(false);
+    // 140h + 남은 12영업일 × 8h = 236h > 한도 230.3h
+    expect(s.remainingBusinessDays).toBe(12);
+    expect(s.willExceedAvgWeeklyLimit).toBe(true);
+  });
+
+  it("남은 날에 휴가가 있으면 그만큼 빼고 판정한다", () => {
+    /*
+     * 안 빼면 월말에 휴가를 낸 사람이 경고를 맞는다. 하루 차이로 꺼지는
+     * 경계라서 휴가 처리가 빠졌으면 이 테스트가 잡는다.
+     */
+    const days = businessDaysFrom(10, 14 * 60);
+    const s = computePeriodSummary(
+      month({
+        days,
+        timeOff: [{ date: "2026-03-20", kind: "full", deductMinutes: 8 * 60 }],
+        asOf: "2026-03-16T10:00",
+      }),
+      base,
+    );
+
+    expect(s.remainingScheduledMinutes).toBe(11 * 8 * 60);
+    expect(s.willExceedAvgWeeklyLimit).toBe(false);
+  });
+
+  it("반차는 절반만 빠진다", () => {
+    const s = computePeriodSummary(
+      month({
+        days: businessDaysFrom(10, 14 * 60),
+        timeOff: [
+          { date: "2026-03-20", kind: "half_pm", deductMinutes: 4 * 60 },
+        ],
+        asOf: "2026-03-16T10:00",
+      }),
+      base,
+    );
+
+    expect(s.remainingScheduledMinutes).toBe(12 * 8 * 60 - 4 * 60);
+    // 4시간만 빠지면 여전히 넘는다
+    expect(s.willExceedAvgWeeklyLimit).toBe(true);
+  });
+
+  it("기간이 끝나면 예상과 확정이 같은 말을 한다", () => {
+    const finished = (minutes: number) =>
+      computePeriodSummary(
+        month({
+          days: businessDaysFrom(22, minutes),
+          asOf: "2026-04-01T10:00",
+        }),
+        base,
+      );
+
+    const under = finished(8 * 60);
+    expect(under.remainingScheduledMinutes).toBe(0);
+    expect(under.willExceedAvgWeeklyLimit).toBe(under.exceedsAvgWeeklyLimit);
+    expect(under.exceedsAvgWeeklyLimit).toBe(false);
+
+    const over = finished(11 * 60);
+    expect(over.willExceedAvgWeeklyLimit).toBe(over.exceedsAvgWeeklyLimit);
+    expect(over.exceedsAvgWeeklyLimit).toBe(true);
+  });
+
+  it("기간이 시작되기 전에는 페이스가 없다", () => {
+    const s = computePeriodSummary(month({ asOf: "2026-02-25T10:00" }), base);
+    expect(s.elapsedBusinessDays).toBe(0);
+    expect(s.remainingBusinessDays).toBe(22);
+    // 소정근로만 다 해도 176시간 — 한도 아래다
+    expect(s.willExceedAvgWeeklyLimit).toBe(false);
+  });
+});

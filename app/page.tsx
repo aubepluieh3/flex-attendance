@@ -324,6 +324,35 @@ export default async function Page({
               </>
             )}
           </div>
+          {/*
+            주 52시간은 정산기간 평균으로 판정하므로(§52) 기간 중의
+            avgWeeklyMinutes 는 분모가 기간 전체라 항상 낮게 나온다. 3월 첫 주에
+            70시간을 일해도 15시간대로 나오는 값을 "주평균"으로 보여주면
+            안심시킨다. 사람이 지금 행동할 근거는 예상치 쪽이다.
+            주 정산에서는 위 "이 페이스면"이 곧 주평균이라 중복이므로 뺀다.
+          */}
+          {rules.settlementKind === "month" && (
+            <div className="tile">
+              <div className="k">예상 주평균</div>
+              {summary.elapsedBusinessDays === 0 ? (
+                <>
+                  <div className="v">—</div>
+                  <div className="k" style={{ marginTop: 2 }}>
+                    아직 페이스가 없음
+                  </div>
+                </>
+              ) : (
+                <>
+                  <div className="v">
+                    {hm(summary.projectedAvgWeeklyMinutes)}
+                  </div>
+                  <div className="k" style={{ marginTop: 2 }}>
+                    한도 {hm(rules.settlement.maxAvgWeeklyMinutes)}
+                  </div>
+                </>
+              )}
+            </div>
+          )}
           <div className="tile">
             <div className="k">야간 근무</div>
             <div className="v">{hm(summary.nightMinutes)}</div>
@@ -355,6 +384,7 @@ export default async function Page({
         summary.flaggedDates.length === 0 &&
         summary.timeOffConflicts.length === 0 &&
         !summary.exceedsAvgWeeklyLimit &&
+        !summary.willExceedAvgWeeklyLimit &&
         !periodState.diff?.changed ? (
           <p className="empty">확인할 항목이 없습니다.</p>
         ) : (
@@ -395,6 +425,38 @@ export default async function Page({
                 </span>
               </li>
             )}
+            {/*
+              확정 초과(위)는 "남은 날을 전부 쉬어도 되돌릴 수 없다"는 뜻이라
+              정확하지만 늦게 켜진다. 매일 14시간이면 정산기간이 3/4 지난 뒤다.
+              그 앞 구간을 하한으로 채운다 — 페이스 외삽이 아니라 "소정근로만
+              해도 넘는다"이므로 임의 문턱이 없고 반박도 되지 않는다.
+
+              이 경고는 본인 화면에만 둔다. 팀 현황·전사 집계는 확정만 본다.
+              예상 위법이 관리자 화면에 뜨면 지목된 사람이 줄이는 게 근무가
+              아니라 기록일 수 있다 (자기신고에 불이익을 붙이는 설계).
+            */}
+            {!summary.exceedsAvgWeeklyLimit &&
+              summary.willExceedAvgWeeklyLimit && (
+                <li>
+                  <span className="icon crit" aria-hidden="true">
+                    !
+                  </span>
+                  <span>
+                    <span className="what">
+                      이대로면 주 평균{" "}
+                      {hm(rules.settlement.maxAvgWeeklyMinutes)}을 넘습니다
+                    </span>
+                    <br />
+                    <span className="why">
+                      누적 {hm(summary.workedMinutes)} · 남은 영업일{" "}
+                      {summary.remainingBusinessDays}일에 소정근로{" "}
+                      {hm(summary.remainingScheduledMinutes)}만 더해도 법정
+                      한도를 넘습니다. 남은 기간 근무를 줄이거나 팀장과
+                      조정하세요.
+                    </span>
+                  </span>
+                </li>
+              )}
             {summary.incompleteDates.map((date) => {
               const l = label(date, zone);
               const d = byDate.get(date);
