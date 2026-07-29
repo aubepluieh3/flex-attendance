@@ -4,12 +4,6 @@ import { redirect } from "next/navigation";
 import { revalidatePath } from "next/cache";
 import { createAdjustment, revertAdjustment } from "@/db/adjust";
 import { closeSessionManually } from "@/db/checkin";
-import {
-  cancelTimeOff,
-  requestTimeOff,
-  TIME_OFF_LABEL,
-  type TimeOffKind,
-} from "@/db/timeoff";
 import { syncNotifications } from "@/db/notify";
 import { closeDueIfStale } from "@/db/close";
 import { now } from "@/lib/clock";
@@ -56,16 +50,7 @@ export async function recordsAction(form: FormData) {
       const h = Math.floor(r.minutes / 60);
       const m = r.minutes % 60;
       query = `msg=${encodeURIComponent(`${r.workDate} 근무를 ${h}시간 ${m}분으로 마감했습니다.`)}`;
-    } else if (op === "requestOff") {
-      const r = await requestTimeOff(viewer, {
-        date: str(form, "offDate"),
-        kind: str(form, "kind") as TimeOffKind,
-        reason: str(form, "offReason"),
-      });
-      query = `msg=${encodeURIComponent(`${r.date} ${TIME_OFF_LABEL[r.kind]}를 신청했습니다. 승인되면 소정근로에서 빠집니다.`)}`;
-    } else if (op === "cancelOff") {
-      const r = await cancelTimeOff(viewer, str(form, "offId"));
-      query = `msg=${encodeURIComponent(`${r.date} 휴가 ${r.wasApproved ? "승인을 취소" : "신청을 취소"}했습니다.`)}`;
+      // 휴가 신청·취소는 app/time-off 로 옮겼다 (op requestOff·cancelOff)
     } else {
       const minutes = str(form, "addedMinutes").trim();
       await createAdjustment(viewer, viewer.id, {

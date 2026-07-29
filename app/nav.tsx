@@ -14,6 +14,13 @@ import { usePathname } from "next/navigation";
 const MENU = [
   { href: "/", label: "내 근무시간", roles: ["member", "manager", "hr", "executive"] },
   { href: "/records", label: "내 기록 · 보정", roles: ["member", "manager", "hr", "executive"] },
+  /*
+   * 휴가는 별도 메뉴다. 보정과 한 화면에 묶여 있었더니 신청 폼이 31일치 기록
+   * 카드 뒤 9화면째에 있었고, "내 기록 · 보정"이라는 이름 때문에 휴가를 찾으러
+   * 갈 곳으로 읽히지도 않았다 — 처음 쓰는 사람은 기능이 있는 줄 몰랐다.
+   * 근로 의무를 면제받는 것과 실제로 일한 것을 신고하는 것은 다른 개념이다.
+   */
+  { href: "/time-off", label: "휴가", roles: ["member", "manager", "hr", "executive"] },
   { href: "/notifications", label: "알림", roles: ["member", "manager", "hr", "executive"] },
   { href: "/team", label: "팀 현황", roles: ["manager", "hr"] },
   { href: "/report", label: "전사 집계", roles: ["hr", "executive"] },

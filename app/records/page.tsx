@@ -1,3 +1,4 @@
+import Link from "next/link";
 import { DateTime } from "luxon";
 import { loadOrgRules, loadTimeOff, loadWorkDays } from "@/db/access";
 import { listAdjustments } from "@/db/adjust";
@@ -443,92 +444,15 @@ export default async function RecordsPage({
       )}
 
       {/*
-        휴가 신청.
-        승인 전에는 소정근로가 줄지 않는다 — 그렇지 않으면 본인이 자기 목표를
-        낮출 수 있다. 잔여 연차는 관리하지 않으므로 그 사실을 밝힌다.
+        휴가는 별도 화면이다 (app/time-off).
+        보정은 실제로 일한 것을 신고하는 것이고 휴가는 근로 의무를 면제받는
+        것이라 성격이 다르다. 여기 묶여 있었을 때 신청 폼이 31일치 카드 뒤
+        9화면째에 있었다. 링크만 남긴다 — 이 화면에서 휴가 badge 를 본 사람이
+        바로 갈 곳이 필요하다.
       */}
-      <section className="card">
-        <h2>휴가 신청</h2>
-        <form action={recordsAction} className="adjust">
-          <input type="hidden" name="op" value="requestOff" />
-          <input type="hidden" name="period" value={range.start} />
-          <label className="field">
-            <span>날짜</span>
-            <input type="date" name="offDate" required defaultValue={today} />
-          </label>
-          <label className="field">
-            <span>종류</span>
-            <select name="kind" defaultValue="full">
-              <option value="full">연차</option>
-              <option value="half_am">오전 반차</option>
-              <option value="half_pm">오후 반차</option>
-              <option value="unpaid">무급휴가</option>
-            </select>
-          </label>
-          <label className="field grow">
-            <span>
-              사유<b> *</b>
-            </span>
-            <input
-              type="text"
-              name="offReason"
-              required
-              placeholder="개인 사정"
-            />
-          </label>
-          <button type="submit">신청</button>
-        </form>
-        <p className="empty" style={{ marginTop: 10 }}>
-          승인되면 소정근로에서 빠집니다. 승인 전에는 반영되지 않습니다.
-          <br />
-          남은 연차 일수는 이 앱에서 관리하지 않습니다 — 인사팀 기준을 따르세요.
-        </p>
-
-        {myOff.length > 0 && (
-          <ul className="offlist">
-            {myOff.map((o) => (
-              <li key={o.id}>
-                <span className="d">
-                  {DateTime.fromISO(o.date, { zone }).toFormat("M월 d일")}
-                </span>
-                <span className="k">{OFF_LABEL[o.kind]}</span>
-                <span
-                  className={
-                    o.status === "approved"
-                      ? "status good inline"
-                      : o.status === "rejected"
-                        ? "status crit inline"
-                        : "status muted inline"
-                  }
-                >
-                  <span className="dot" aria-hidden="true" />
-                  {o.status === "approved"
-                    ? `승인 · ${o.decidedByName}`
-                    : o.status === "rejected"
-                      ? "반려"
-                      : "승인 대기"}
-                </span>
-                <span className="why">
-                  {o.status === "rejected" && o.decisionNote
-                    ? `반려 사유: ${o.decisionNote}`
-                    : (o.reason ?? "")}
-                </span>
-                {/* 승인 후에는 본인이 취소할 수 없다 (팀장 결정) */}
-                {o.status !== "approved" && (
-                  <form action={recordsAction}>
-                    <input type="hidden" name="op" value="cancelOff" />
-                    <input type="hidden" name="offId" value={o.id} />
-                    <input type="hidden" name="period" value={range.start} />
-                    <button type="submit" className="pill">
-                      취소
-                    </button>
-                  </form>
-                )}
-              </li>
-            ))}
-          </ul>
-        )}
-      </section>
+      <p className="empty">
+        휴가 신청과 승인 상태는 <Link href="/time-off">휴가</Link>에서 봅니다.
+      </p>
 
       <section className="card">
         <h2>보정 이력</h2>
