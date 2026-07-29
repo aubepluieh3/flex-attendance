@@ -198,6 +198,140 @@ export default async function Page({
     ? `근태 기록은 ${DateTime.fromISO(lastRecorded, { zone }).toFormat("M월 d일")}까지 들어와 있음`
     : "이 기간에 들어온 근태 기록이 없음";
 
+  /**
+   * 일별 근무 한 줄.
+   *
+   * 주차로 묶으면서 같은 줄을 두 곳(묶음 안 / 안 묶을 때)에서 쓰게 되어
+   * 함수로 뺐다.
+   */
+  const dayRow = (date: string) => {
+    const d = byDate.get(date);
+    const l = label(date, zone);
+    const dayOff = offByDate.get(date);
+    const weekend = rules.attendance.weekendDays.includes(
+      DateTime.fromISO(date, { zone }).weekday,
+    );
+    const width = d
+      ? Math.min(100, (d.workMinutes / SCALE_MINUTES) * 100)
+      : 0;
+    const overLimit = d?.flags.includes("over_daily_limit");
+
+    /** 오른쪽에 쓸 값. 시간이 없으면 왜 없는지를 쓴다. */
+    const value =
+      d && d.status === "open" ? (
+        <>
+          {hm(minutesIncludingOpen(d, rules.attendance, asOf))}
+          <span className="note">근무 중</span>
+        </>
+      ) : d && d.status === "incomplete" ? (
+        <span className="warn">퇴근 기록 없음</span>
+      ) : d ? (
+        <>
+          {hm(d.workMinutes)}
+          {d.sessionCount > 1 && (
+            <span className="note">{d.sessionCount}번 나눠</span>
+          )}
+        </>
+      ) : dayOff ? (
+        <span className="off">{OFF_LABEL[dayOff.kind]}</span>
+      ) : (
+        <span className="off">{date > asOfDate ? "—" : "기록 없음"}</span>
+      );
+
+    return (
+      <li key={date} className={weekend ? "we" : undefined}>
+        <div className="d">
+          {l.md} <span>({l.dow})</span>
+        </div>
+        <div
+          className="prog"
+          role="img"
+          aria-label={d ? `실근무 ${hm(d.workMinutes)}` : "근무 기록 없음"}
+        >
+          {width > 0 && (
+            <span
+              className={
+                overLimit
+                  ? "fill over"
+                  : d?.status === "open"
+                    ? "fill open"
+                    : "fill"
+              }
+              style={{ width: `${width}%` }}
+            />
+          )}
+          {/*
+            눈금 = 1일 소정근로. 없으면 막대가 많은지 적은지 모른다.
+            아직 오지 않은 날에는 그리지 않는다 — 안 지난 날에 기준선을
+            두면 "여기까지 못 채웠다"로 읽힌다.
+          */}
+          {date <= asOfDate && (
+            <i
+              className="tick"
+              style={{
+                left: `${(REFERENCE_MINUTES / SCALE_MINUTES) * 100}%`,
+              }}
+            />
+          )}
+        </div>
+        <div className="v">{value}</div>
+      </li>
+    );
+  };
+
+  /*
+   * 주차로 묶는다.
+   *
+   * 월 정산이면 31행이 한 줄로 늘어서서 읽히지 않는다. 주 경계는 조직의
+   * 주 시작일을 따르고, 정산기간을 넘지 않게 그 안의 날짜만 담는다 —
+   * 7월 1일이 수요일이면 첫 주는 3일짜리 조각이 되는 게 맞다.
+   * 억지로 6월과 합치면 이 화면이 정산기간 밖을 보여주게 된다.
+   */
+  const weekGroups: {
+    key: string;
+    label: string;
+    dates: string[];
+    workedMinutes: number;
+    attention: number;
+    hasToday: boolean;
+  }[] = [];
+
+  for (const date of dates) {
+    const w = resolvePeriod(date, {
+      kind: "week",
+      weekStartDay: rules.weekStartDay,
+      timezone: zone,
+    });
+    let g = weekGroups.find((x) => x.key === w.start);
+    if (!g) {
+      g = {
+        key: w.start,
+        label: "",
+        dates: [],
+        workedMinutes: 0,
+        attention: 0,
+        hasToday: false,
+      };
+      weekGroups.push(g);
+    }
+    g.dates.push(date);
+    const d = byDate.get(date);
+    if (d) {
+      g.workedMinutes += d.workMinutes;
+      // 접힌 주에도 확인할 것이 있으면 요약에 남긴다
+      if (d.status === "incomplete" || d.flags.length > 0) g.attention += 1;
+    }
+    if (date === asOfDate) g.hasToday = true;
+  }
+  for (const g of weekGroups) {
+    const from = label(g.dates[0], zone);
+    const to = label(g.dates[g.dates.length - 1], zone);
+    g.label =
+      g.dates.length === 1
+        ? `${from.md}(${from.dow})`
+        : `${from.md} ~ ${to.md} · ${g.dates.length}일`;
+  }
+
   return (
     <main className="page">
       <div className="head">
@@ -343,7 +477,15 @@ export default async function Page({
                 </>
               ) : (
                 <>
-                  <div className="v">
+                  {/* 한도를 넘긴 예상치는 색으로도 말한다 */}
+                  <div
+                    className={
+                      summary.projectedAvgWeeklyMinutes >
+                      rules.settlement.maxAvgWeeklyMinutes
+                        ? "v over"
+                        : "v"
+                    }
+                  >
                     {hm(summary.projectedAvgWeeklyMinutes)}
                   </div>
                   <div className="k" style={{ marginTop: 2 }}>
@@ -535,89 +677,34 @@ export default async function Page({
       */}
       <section className="card">
         <h2>일별 근무</h2>
-        <ul className="daybars">
-          {dates.map((date) => {
-            const d = byDate.get(date);
-            const l = label(date, zone);
-            const dayOff = offByDate.get(date);
-            const weekend = rules.attendance.weekendDays.includes(
-              DateTime.fromISO(date, { zone }).weekday,
-            );
-            const width = d
-              ? Math.min(100, (d.workMinutes / SCALE_MINUTES) * 100)
-              : 0;
-            const overLimit = d?.flags.includes("over_daily_limit");
-
-            /** 오른쪽에 쓸 값. 시간이 없으면 왜 없는지를 쓴다. */
-            const value =
-              d && d.status === "open" ? (
-                <>
-                  {hm(minutesIncludingOpen(d, rules.attendance, asOf))}
-                  <span className="note">근무 중</span>
-                </>
-              ) : d && d.status === "incomplete" ? (
-                <span className="warn">퇴근 기록 없음</span>
-              ) : d ? (
-                <>
-                  {hm(d.workMinutes)}
-                  {d.sessionCount > 1 && (
-                    <span className="note">{d.sessionCount}번 나눠</span>
-                  )}
-                </>
-              ) : dayOff ? (
-                <span className="off">{OFF_LABEL[dayOff.kind]}</span>
-              ) : (
-                <span className="off">{date > asOfDate ? "—" : "기록 없음"}</span>
-              );
-
-            return (
-              <li key={date} className={weekend ? "we" : undefined}>
-                <div className="d">
-                  {l.md} <span>({l.dow})</span>
-                </div>
-                <div
-                  className="prog"
-                  role="img"
-                  aria-label={
-                    d ? `실근무 ${hm(d.workMinutes)}` : "근무 기록 없음"
-                  }
-                >
-                  {width > 0 && (
-                    <span
-                      className={
-                        overLimit
-                          ? "fill over"
-                          : d?.status === "open"
-                            ? "fill open"
-                            : "fill"
-                      }
-                      style={{ width: `${width}%` }}
-                    />
-                  )}
-                  {/*
-                    눈금 = 1일 소정근로. 없으면 막대가 많은지 적은지 모른다.
-                    아직 오지 않은 날에는 그리지 않는다 — 안 지난 날에 기준선을
-                    두면 "여기까지 못 채웠다"로 읽힌다.
-                  */}
-                  {date <= asOfDate && (
-                    <i
-                      className="tick"
-                      style={{
-                        left: `${(REFERENCE_MINUTES / SCALE_MINUTES) * 100}%`,
-                      }}
-                    />
-                  )}
-                </div>
-                <div className="v">{value}</div>
-              </li>
-            );
-          })}
-        </ul>
+        {weekGroups.length <= 1 ? (
+          <ul className="daybars">{dates.map(dayRow)}</ul>
+        ) : (
+          /*
+            월 정산이면 31행이 된다. 주차로 묶고 오늘이 든 주만 펼친다.
+            접힌 주에도 확인할 것이 있으면 요약에 표시를 남긴다 — 안 그러면
+            지난 주 미완료가 숨는다.
+          */
+          weekGroups.map((g) => (
+            <details className="weekgroup" key={g.key} open={g.hasToday}>
+              <summary>
+                <span className="range">{g.label}</span>
+                <span className="sum">{hm(g.workedMinutes)}</span>
+                {g.attention > 0 && (
+                  <span className="badge">확인 {g.attention}</span>
+                )}
+                {g.hasToday && <span className="now">이번 주</span>}
+              </summary>
+              <ul className="daybars">{g.dates.map(dayRow)}</ul>
+            </details>
+          ))
+        )}
         <p className="empty" style={{ marginTop: 12 }}>
           눈금은 1일 소정근로 {hm(REFERENCE_MINUTES)}입니다. 자율 출근제는
           하루가 아니라 정산기간 총량으로 맞추면 됩니다.
         </p>
       </section>
+
 
       {/* 정확한 숫자는 접어 둔다. 색에만 의존하지 않기 위해 표를 없애지 않는다 */}
       <details className="fold" style={{ marginBottom: 14 }}>
