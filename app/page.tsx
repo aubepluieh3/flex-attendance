@@ -182,6 +182,37 @@ export default async function Page({
 
   // 오늘 채워야 하는 몫과, 그러려면 언제 종료하면 되는지
   const neededToday = Math.max(0, requiredPerDay - todayMinutes);
+
+  /*
+   * 채울 수 없는 기간이면 오늘 카드도 그걸 알아야 한다.
+   *
+   * 위 remainingLabel 은 unreachable 을 보고 문구를 바꾸는데 오늘 카드는 안
+   * 봤다. 그래서 "오늘 26시간 40분 채우면 목표에 맞습니다" 바로 아래에
+   * "채울 수 없습니다"가 붙었다 — 같은 화면의 두 카드가 서로를 부정했다.
+   *
+   * 오늘 몫 대신 기간 사실을 넘긴다. 상한을 오늘 몫 자리에 넣으면 "채워라"로
+   * 읽혀서 과로를 권하는 신호가 된다 (today-card.tsx 의 cannotFill 주석).
+   *
+   * maxAdditional 에서 오늘 실적을 뺀다 — 남은 영업일에 오늘이 포함되는데
+   * 오늘 몫은 이미 workedMinutes 에 들어가 remainingMinutes 를 줄였으므로,
+   * 안 빼면 같은 시간을 두 번 세어 부족분이 작게 나온다.
+   */
+  const cannotFill =
+    unreachable && dailyLimit !== null
+      ? (() => {
+          const capacity = summary.remainingBusinessDays * dailyLimit;
+          const maxAdditional = Math.max(
+            0,
+            capacity - (isTodayBusiness ? todayMinutes : 0),
+          );
+          return {
+            maxAdditional,
+            shortfall: Math.max(0, summary.remainingMinutes - maxAdditional),
+            target: summary.targetMinutes,
+            businessDays: summary.remainingBusinessDays,
+          };
+        })()
+      : null;
   const leaveAt = todayDay?.openSince
     ? leaveTimeFor({
         openSince: todayDay.openSince,
@@ -199,6 +230,7 @@ export default async function Page({
       : 0,
     todayMinutes,
     neededToday,
+    cannotFill,
     leaveAt,
     leaveCrossesMidnight: leaveAt
       ? DateTime.fromJSDate(leaveAt, { zone }).toISODate() !== asOfDate
