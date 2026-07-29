@@ -72,14 +72,14 @@ export default async function Page({
       days,
       timeOff: off,
       asOf,
-      // 그 사람의 정산기간 = 조직 정산기간 ∩ 재직기간
+      // 개인 집계·적용기간 = 조직 정산기간 ∩ 근로관계 존속기간
       employment: { hiredAt: viewer.hiredAt, resignedAt: viewer.resignedAt },
     },
     rules.settlement,
   );
 
   /*
-   * 날짜 목록은 그 사람의 정산기간(= 조직 기간 ∩ 재직기간)이다.
+   * 날짜 목록은 개인 집계기간(= 조직 정산기간 ∩ 근로관계 존속기간)이다.
    *
    * 입사 전 빈 날짜를 보여주면 "입사 전인데 안 일했다"로 읽히고, 주차 줄까지
    * 만들어져서 없는 미달이 생긴다. 그래서 빼는데 — 기록이 **있는** 날은 뺄 수
