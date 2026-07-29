@@ -168,7 +168,7 @@ export default async function TeamMemberPage({
           <>
             <br />
             <span className="dim">
-              재직 {summary.effectiveStart} ~ {summary.effectiveEnd} — 소정근로와
+              재직 {summary.applicableStart} ~ {summary.applicableEnd} — 소정근로와
               주 평균이 이 구간으로 계산됩니다
             </span>
           </>

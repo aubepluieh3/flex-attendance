@@ -373,7 +373,7 @@ export default async function TeamPage({
                           <span>
                             {hm(s.workedMinutes)} / {hm(s.targetMinutes)}
                             {s.partialEmployment &&
-                              ` · 재직 ${md(s.effectiveStart)}~${md(s.effectiveEnd)}`}
+                              ` · 재직 ${md(s.applicableStart)}~${md(s.applicableEnd)}`}
                           </span>
                           <span
                             className={s.exceedsAvgWeeklyLimit ? "over" : "none"}

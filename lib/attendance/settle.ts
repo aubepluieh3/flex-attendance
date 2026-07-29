@@ -82,18 +82,28 @@ export type PeriodInput = {
 };
 
 export type PeriodSummary = {
-  /** 조직 정산기간 */
+  /**
+   * **조직 정산기간** (organizationSettlementPeriod).
+   *
+   * 근로자대표와 서면합의로 정한 제도상의 기간이다(§52①2호). 개인의 입사일·
+   * 퇴사일로 재정의되지 않는다 — 마감 단위이기도 하다.
+   */
   periodStart: string;
   periodEnd: string;
 
   /**
-   * 그 사람의 정산기간 = 조직 정산기간 ∩ 재직기간.
+   * **개인 집계·적용 대상기간** (employmentApplicablePeriod)
+   * = 조직 정산기간 ∩ 근로관계 존속기간.
    *
-   * 아래 모든 값이 이 구간에서 나온다. 화면에서 조직 기간(periodStart)을
-   * 그 사람의 구간으로 쓰면 안 된다 — 같은 "7월"이 사람마다 다른 구간을 뜻한다.
+   * 정산기간이 개인별로 짧아지는 것이 **아니다.** 정산기간은 조직의 것이고,
+   * 개인에게 달린 것은 그 기간 중 어디까지가 이 사람에게 적용되는가다.
+   * 아래 값들(소정근로·실근무·법정 총량·한도)이 이 구간에서 나온다.
+   *
+   * 화면에서 조직 기간(periodStart)을 이 구간처럼 쓰면 안 된다 —
+   * 같은 "7월"이 사람마다 다른 적용 구간을 뜻한다.
    */
-  effectiveStart: string;
-  effectiveEnd: string;
+  applicableStart: string;
+  applicableEnd: string;
   /**
    * 교집합이 비어 있으면 false — 입사 전이거나 퇴사 후의 정산기간이다.
    *
@@ -129,15 +139,31 @@ export type PeriodSummary = {
   paceStatus: PaceStatus;
 
   /**
-   * 정산기간 평균 주 근로시간.
+   * 개인 집계 대상기간의 **법정근로 총량** = 대상기간 일수 ÷ 7 × 40시간.
    *
-   * 분모는 **기간 전체** 주수다. 기간 중에는 분자만 진행 중이므로 이 값은
-   * 기간이 끝나기 전에는 뜻이 없다 — 3월 첫 주에 70시간을 일해도 15시간대로
-   * 나온다. 관리자 화면에 기간 중 이 값을 그대로 보여주면 안심시킨다.
+   * 이걸 넘긴 시간이 연장근로다(§50 · §56). 분모를 조직 정산기간으로 두면
+   * 근로관계가 존재하지 않았던 기간까지 0시간으로 평균에 들어가서, 실제 근로기간의
+   * 평균 근로시간과 연장근로 한도가 인위적으로 희석된다. 그래서 대상기간을 쓴다.
+   */
+  applicableStatutoryMinutes: number;
+  /**
+   * 개인 집계 대상기간의 **법정 한도 총량** = 대상기간 일수 ÷ 7 × 52시간.
+   *
+   * 40시간 + §53① 연장근로 12시간. 일반적인 선택적 근로시간제의 법정 상한이고,
+   * 특별연장근로 인가(§53④)나 특례업종(§59) 같은 예외는 계산하지 않는다.
+   */
+  applicableLimitMinutes: number;
+
+  /**
+   * 평균 주 근로시간. 분모는 **개인 집계 대상기간**의 주수다.
+   *
+   * 기간 중에는 분자만 진행 중이므로 이 값은 기간이 끝나기 전에는 뜻이 없다 —
+   * 3월 첫 주에 70시간을 일해도 15시간대로 나온다. 관리자 화면에 기간 중 이
+   * 값을 그대로 보여주면 안심시킨다.
    * 진행 중에 사람에게 보여줄 값은 projectedAvgWeeklyMinutes 쪽이다.
    */
   avgWeeklyMinutes: number;
-  /** 정산기간 총 법정근로시간을 넘은 분 = 연장근로 */
+  /** applicableStatutoryMinutes 를 넘은 분 = 연장근로 (§56 가산 대상) */
   overtimeMinutes: number;
   /**
    * 평균 주 52시간 초과 — 위법 소지.
@@ -278,20 +304,20 @@ export function computePeriodSummary(
    */
   const hiredAt = input.employment?.hiredAt ?? null;
   const resignedAt = input.employment?.resignedAt ?? null;
-  const effectiveStart =
+  const applicableStart =
     hiredAt !== null && hiredAt > periodStart ? hiredAt : periodStart;
-  const effectiveEnd =
+  const applicableEnd =
     resignedAt !== null && resignedAt < periodEnd ? resignedAt : periodEnd;
-  const employed = effectiveStart <= effectiveEnd;
+  const employed = applicableStart <= applicableEnd;
   const partialEmployment =
-    employed && (effectiveStart !== periodStart || effectiveEnd !== periodEnd);
+    employed && (applicableStart !== periodStart || applicableEnd !== periodEnd);
 
   // 조직 기간 영업일 — targetCalcMethod 가 "fixed" 일 때 비례 계산의 분모다
   const orgBusinessDays = eachDate(periodStart, periodEnd, zone).filter((d) =>
     isBusinessDay(d, rules),
   ).length;
 
-  const allDates = employed ? eachDate(effectiveStart, effectiveEnd, zone) : [];
+  const allDates = employed ? eachDate(applicableStart, applicableEnd, zone) : [];
   const businessDates = allDates.filter((d) => isBusinessDay(d, rules));
 
   const inPeriod = new Set(allDates);
@@ -336,10 +362,10 @@ export function computePeriodSummary(
   const asOfDate = DateTime.fromJSDate(asOf, { zone }).toISODate()!;
   const paceCutoff = !employed
     ? null
-    : asOfDate < effectiveStart
+    : asOfDate < applicableStart
       ? null
-      : asOfDate > effectiveEnd
-        ? effectiveEnd
+      : asOfDate > applicableEnd
+        ? applicableEnd
         : DateTime.fromISO(asOfDate, { zone }).minus({ days: 1 }).toISODate()!;
 
   const elapsedBusinessDates =
@@ -376,7 +402,18 @@ export function computePeriodSummary(
         ? "behind"
         : "on_track";
 
-  // ── 법정 한도: 개별 주가 아니라 정산기간 평균으로 본다 ──
+  /*
+   * ── 법정 한도: 개별 주가 아니라 정산기간을 평균해서 본다 (§52①) ──
+   *
+   * 분모는 **개인 집계 대상기간**(allDates)의 주수다. 조직 정산기간이 아니다 —
+   * 근로관계가 존재하지 않았던 기간까지 0시간으로 평균에 넣으면 실제 근로기간의
+   * 평균 근로시간과 연장근로 한도가 인위적으로 희석된다. 7월 20일 입사자가
+   * 영업일 10일에 120시간을 일해도(주 70시간 페이스) 조직 분모로는 주평균
+   * 27시간이 되고 연장근로가 0으로 계산된다.
+   *
+   * 정산기간이 개인별로 짧아진다는 뜻이 **아니다.** 정산기간은 서면합의로 정한
+   * 조직의 것이고, 평균을 그 사람의 근로관계 존속기간으로 계산하는 것이다.
+   */
   const weeks = allDates.length / 7;
   const avgWeeklyMinutes = weeks > 0 ? workedMinutes / weeks : 0;
   const legalTotalMinutes = weeks * rules.legalWeeklyMinutes;
@@ -484,8 +521,10 @@ export function computePeriodSummary(
   return {
     periodStart,
     periodEnd,
-    effectiveStart,
-    effectiveEnd,
+    applicableStart,
+    applicableEnd,
+    applicableStatutoryMinutes: Math.round(legalTotalMinutes),
+    applicableLimitMinutes: Math.round(limitTotalMinutes),
     employed,
     partialEmployment,
     businessDays: businessDates.length,

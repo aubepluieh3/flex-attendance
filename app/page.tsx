@@ -90,14 +90,14 @@ export default async function Page({
     .filter(
       (d) =>
         d.tagCount > 0 &&
-        (d.workDate < summary.effectiveStart ||
-          d.workDate > summary.effectiveEnd),
+        (d.workDate < summary.applicableStart ||
+          d.workDate > summary.applicableEnd),
     )
     .map((d) => d.workDate);
   const dates = [
     ...new Set([
       ...(summary.employed
-        ? eachDate(summary.effectiveStart, summary.effectiveEnd, zone)
+        ? eachDate(summary.applicableStart, summary.applicableEnd, zone)
         : []),
       ...outsideWithRecord,
     ]),
@@ -448,10 +448,10 @@ export default async function Page({
           <>
             <br />
             <span className="dim">
-              재직 {label(summary.effectiveStart, zone).md}
-              {summary.effectiveEnd === range.end
+              재직 {label(summary.applicableStart, zone).md}
+              {summary.applicableEnd === range.end
                 ? "~"
-                : `~${label(summary.effectiveEnd, zone).md}`}{" "}
+                : `~${label(summary.applicableEnd, zone).md}`}{" "}
               — 소정근로와 주 평균이 이 구간으로 계산됩니다
             </span>
           </>

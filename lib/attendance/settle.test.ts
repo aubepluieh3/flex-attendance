@@ -730,8 +730,8 @@ describe("재직기간 교집합 — 중도 입사·퇴사", () => {
       base,
     );
     // 3/05(목) 3/06(금) 두 날만 재직
-    expect(s.effectiveStart).toBe("2026-03-05");
-    expect(s.effectiveEnd).toBe("2026-03-08");
+    expect(s.applicableStart).toBe("2026-03-05");
+    expect(s.applicableEnd).toBe("2026-03-08");
     expect(s.businessDays).toBe(2);
     expect(s.targetMinutes).toBe(16 * 60);
     expect(s.partialEmployment).toBe(true);
@@ -778,7 +778,7 @@ describe("재직기간 교집합 — 중도 입사·퇴사", () => {
       { ...week({ days }), employment: { hiredAt: null, resignedAt: "2026-03-04" } },
       base,
     );
-    expect(resigned.effectiveEnd).toBe("2026-03-04");
+    expect(resigned.applicableEnd).toBe("2026-03-04");
     expect(resigned.exceedsAvgWeeklyLimit).toBe(true);
   });
 

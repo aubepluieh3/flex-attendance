@@ -42,29 +42,69 @@ const month = (employment?: {
   ...(employment ? { employment } : {}),
 });
 
-describe("불변식 1 — 조직 기간을 그 사람의 분모로 쓰지 않는다", () => {
+describe("불변식 1 — 법정 총량·한도의 분모는 개인 집계 대상기간이다", () => {
   /*
-   * 분모가 목표보다 중요하다. 목표만 비례로 깎고 분모를 기간 전체로 두면
-   * 화면의 "남은 시간"은 맞아 보이는데 52시간 판정은 계속 느슨하다 —
-   * 아무도 의심하지 않게 되므로 지금보다 나쁘다.
+   * 조직 정산기간을 분모로 두면 근로관계가 존재하지 않았던 기간까지 0시간으로
+   * 평균에 들어가서, 실제 근로기간의 평균 근로시간과 연장근로 한도가 인위적으로
+   * 희석된다. 목표만 비례로 깎고 분모를 그대로 두는 절반짜리가 특히 나쁘다 —
+   * 화면의 "남은 시간"은 맞아 보이는데 52시간 판정은 계속 느슨하다.
+   *
+   * 정산기간이 개인별로 짧아진다는 뜻이 아니다. 정산기간은 서면합의로 정한
+   * 조직의 것이고, 평균을 그 사람의 근로관계 존속기간으로 계산하는 것이다.
    */
-  it("재직 구간이 짧아지면 법정 총량도 같이 줄어든다", () => {
+  const daysOf = (a: string, b: string) =>
+    (Date.parse(b) - Date.parse(a)) / 86400000 + 1;
+
+  it("대상기간이 짧아지면 법정 총량과 한도가 같이 줄어든다", () => {
     const whole = computePeriodSummary(month(), rules);
     const half = computePeriodSummary(
       month({ hiredAt: "2026-03-16", resignedAt: null }),
       rules,
     );
 
-    // 목표만이 아니라 avgWeekly 의 분모(= 법정 총량)도 줄어야 한다
     expect(half.targetMinutes).toBeLessThan(whole.targetMinutes);
+    expect(half.applicableStatutoryMinutes).toBeLessThan(
+      whole.applicableStatutoryMinutes,
+    );
+    expect(half.applicableLimitMinutes).toBeLessThan(
+      whole.applicableLimitMinutes,
+    );
+  });
 
-    const legalTotal = (s: ReturnType<typeof computePeriodSummary>) => {
-      const days =
-        (Date.parse(s.effectiveEnd) - Date.parse(s.effectiveStart)) / 86400000 +
-        1;
-      return (days / 7) * rules.legalWeeklyMinutes;
-    };
-    expect(legalTotal(half)).toBeLessThan(legalTotal(whole));
+  it("내보낸 총량이 대상기간 일수 ÷ 7 × 40h 와 정확히 맞는다", () => {
+    for (const emp of [
+      undefined,
+      { hiredAt: "2026-03-16", resignedAt: null },
+      { hiredAt: null, resignedAt: "2026-03-10" },
+      { hiredAt: "2026-03-05", resignedAt: "2026-03-20" },
+    ]) {
+      const s = computePeriodSummary(month(emp), rules);
+      const d = daysOf(s.applicableStart, s.applicableEnd);
+      expect(s.applicableStatutoryMinutes).toBe(
+        Math.round((d / 7) * rules.legalWeeklyMinutes),
+      );
+      expect(s.applicableLimitMinutes).toBe(
+        Math.round((d / 7) * rules.maxAvgWeeklyMinutes),
+      );
+    }
+  });
+
+  it("퇴사자에도 같은 규칙이 적용된다 (입사자와 대칭)", () => {
+    // 3/16 입사(뒤쪽 16일)와 3/16 퇴사(앞쪽 16일)는 대상기간 길이가 같다
+    const hired = computePeriodSummary(
+      month({ hiredAt: "2026-03-16", resignedAt: null }),
+      rules,
+    );
+    const resigned = computePeriodSummary(
+      month({ hiredAt: null, resignedAt: "2026-03-16" }),
+      rules,
+    );
+    expect(daysOf(hired.applicableStart, hired.applicableEnd)).toBe(16);
+    expect(daysOf(resigned.applicableStart, resigned.applicableEnd)).toBe(16);
+    expect(resigned.applicableStatutoryMinutes).toBe(
+      hired.applicableStatutoryMinutes,
+    );
+    expect(resigned.applicableLimitMinutes).toBe(hired.applicableLimitMinutes);
   });
 
   it("같은 근무를 해도 재직이 짧으면 주평균이 높게 나온다", () => {
@@ -124,7 +164,7 @@ describe("불변식 2 — 교집합이 비면 0이 아니라 employed=false", ()
       rules,
     );
     expect(s.employed).toBe(true);
-    expect(s.effectiveStart).toBe("2026-03-31");
+    expect(s.applicableStart).toBe("2026-03-31");
     // 3/31(화)은 영업일이므로 하루치
     expect(s.businessDays).toBe(1);
   });
@@ -134,7 +174,7 @@ describe("불변식 2 — 교집합이 비면 0이 아니라 employed=false", ()
       month({ hiredAt: null, resignedAt: "2026-03-02" }),
       rules,
     );
-    expect(s.effectiveEnd).toBe("2026-03-02");
+    expect(s.applicableEnd).toBe("2026-03-02");
     expect(s.businessDays).toBe(1); // 3/01은 일요일, 3/02(월)만
   });
 });
