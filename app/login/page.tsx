@@ -38,32 +38,13 @@ export default async function LoginPage({
         </p>
 
         {/*
-          왜 로그인 화면에 왔는지 말해준다. 설명이 없으면 사용자는 비밀번호가
-          틀렸는지 계정이 잠겼는지 알 수 없고, 앱이 고장 났다고 생각한다.
-        */}
-        {reason === "expired" && (
-          <section className="card" style={{ marginBottom: 12 }}>
-            <ul className="issues">
-              <li>
-                <span className="icon warn" aria-hidden="true">
-                  !
-                </span>
-                <span>
-                  <span className="what">로그인이 만료되었습니다</span>
-                  <br />
-                  <span className="why">
-                    비밀번호가 틀린 것이 아닙니다. 다시 로그인하면
-                    {target ? " 보던 화면으로 돌아갑니다." : " 계속 이용할 수 있습니다."}
-                  </span>
-                </span>
-              </li>
-            </ul>
-          </section>
-        )}
+          왜 이 화면에 왔는지는 폼이 말한다 (app/login/form.tsx).
+          로그인 실패 메시지와 서로를 부정하지 않게 한 곳에 모았다.
 
-        <section className="card">
-          <LoginForm next={target} />
-        </section>
+          reason 이 없으면 처음 온 사람이거나 로그아웃한 사람이다 — 만료를
+          말하지 않는다. requestViewer() 가 쿠키 유무로 갈라서 넘긴다.
+        */}
+        <LoginForm next={target} expired={reason === "expired"} />
 
         {/* 처음 온 사람은 이게 무슨 앱인지부터 알아야 한다 */}
         <p className="empty" style={{ marginTop: 14 }}>

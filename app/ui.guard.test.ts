@@ -179,3 +179,39 @@ describe("알림 종류를 늘리면 화면 표시도 늘린다", () => {
     );
   });
 });
+
+describe("로그인 안내는 서로를 부정하지 않는다", () => {
+  /*
+   * "로그인이 만료되었습니다 (비밀번호가 틀린 것이 아닙니다)" 와
+   * "사번 또는 비밀번호가 올바르지 않습니다" 가 한 화면에 같이 떴다.
+   *
+   * 원인은 만료 안내가 서버 컴포넌트(page.tsx)에 있어서 로그인 실패 여부를
+   * 알 수 없었던 것이다. 폼과 같은 컴포넌트에 둬야 실패했을 때 물러날 수 있다.
+   * 편의상 page.tsx 로 다시 옮기기 쉬운 자리라 검사로 박는다.
+   */
+  const src = (rel: string) => readFileSync(rel, "utf8");
+
+  it("만료 안내는 폼과 같은 컴포넌트에 있다", () => {
+    expect(
+      src("app/login/form.tsx").includes("만료되었습니다"),
+      "만료 안내를 app/login/form.tsx 에 두세요 — 실패 메시지와 같은 곳이어야 물러날 수 있습니다",
+    ).toBe(true);
+    expect(
+      src("app/login/page.tsx").includes("만료되었습니다"),
+      "app/login/page.tsx 는 로그인 실패 여부를 모릅니다. 만료 안내를 여기 두면 두 메시지가 같이 뜹니다",
+    ).toBe(false);
+  });
+
+  it("처음 온 사람에게 만료를 말하지 않는다", () => {
+    /*
+     * requestViewer 가 쿠키 유무로 갈라야 한다. 무조건 reason=expired 를
+     * 붙이면 한 번도 로그인하지 않은 사람이 첫 화면에서 "만료되었습니다"를
+     * 본다 — 앱을 처음 켠 사람이 자기가 뭘 잘못했다고 생각한다.
+     */
+    const viewer = src("app/viewer.ts");
+    expect(
+      /SESSION_COOKIE/.test(viewer),
+      "app/viewer.ts 의 requestViewer 는 쿠키 유무로 만료를 가려야 합니다",
+    ).toBe(true);
+  });
+});

@@ -4,7 +4,17 @@ import { cookies, headers } from "next/headers";
 import { redirect } from "next/navigation";
 import { login, logout, SESSION_COOKIE } from "@/db/auth";
 
-export type LoginState = { message?: string };
+export type LoginState = {
+  message?: string;
+  /**
+   * 실패했을 때 사번을 되돌려준다.
+   *
+   * React 는 서버 액션이 끝나면 폼을 초기화하므로, 안 돌려주면 비밀번호만
+   * 틀렸는데 사번까지 다시 타야 한다. 모바일에서 `F2019-041` 재입력이다.
+   * 비밀번호는 절대 돌려주지 않는다.
+   */
+  employeeNo?: string;
+};
 
 export async function loginAction(
   _prev: LoginState,
@@ -17,13 +27,14 @@ export async function loginAction(
     h.get("x-real-ip") ||
     null;
 
+  const employeeNo = String(form.get("employeeNo") ?? "");
   const result = await login(
-    String(form.get("employeeNo") ?? ""),
+    employeeNo,
     String(form.get("password") ?? ""),
     ip,
   );
 
-  if (!result.ok) return { message: result.message };
+  if (!result.ok) return { message: result.message, employeeNo };
 
   const jar = await cookies();
   jar.set(SESSION_COOKIE, result.token, {
