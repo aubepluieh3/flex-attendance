@@ -1043,7 +1043,7 @@ button.danger:hover {
   list-style: none;
   display: flex;
   align-items: center;
-  gap: 10px;
+  gap: 8px;
   padding: 10px 12px;
   border-radius: 8px;
   background: var(--surface-2);
@@ -1066,15 +1066,43 @@ button.danger:hover {
   background: var(--accent-soft);
   color: var(--accent-ink);
 }
-.weekgroup > summary .range {
-  font-weight: 620;
+/*
+ * 접힌 줄들이 열로 맞게 폭을 고정한다.
+ *
+ * 전에는 "7/1 ~ 7/5 · 5일" 처럼 한 덩어리였는데, 조각 주 때문에 일수가 섞이고
+ * 날짜 폭도 달라서 줄마다 들쭉날쭉했다. 주차 번호 · 날짜 · 합계를 각자
+ * 고정 칸에 넣고 숫자는 tabular-nums 로 자리를 맞춘다.
+ */
+.weekgroup > summary .ord {
+  flex: none;
+  width: 44px;
+  font-weight: 650;
   color: var(--ink);
+}
+.weekgroup > summary .span {
+  flex: none;
+  width: 66px;
+  color: var(--ink-3);
   font-variant-numeric: tabular-nums;
 }
+/*
+ * 합계는 마지막 칸이다. 배지·칩을 합계 뒤에 뒀을 때는 그 폭만큼 합계가
+ * 왼쪽으로 밀려서 줄마다 20~56px 어긋났다. 폭까지 고정해야 "5시간 30분" 과
+ * "55시간" 이 같은 자리에서 시작한다.
+ */
 .weekgroup > summary .sum {
   margin-left: auto;
+  flex: none;
+  width: 80px;
+  text-align: right;
   font-variant-numeric: tabular-nums;
   font-weight: 600;
+}
+@media (max-width: 360px) {
+  /* 아주 좁으면 날짜를 접는다. 주차 번호가 있으니 위치는 안 잃는다 */
+  .weekgroup > summary .span {
+    display: none;
+  }
 }
 /* 이번 주라는 표시. 접힌 주들 사이에서 어디가 지금인지 */
 .weekgroup > summary .now {

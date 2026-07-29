@@ -289,7 +289,10 @@ export default async function Page({
    */
   const weekGroups: {
     key: string;
-    label: string;
+    /** "3주차" — 정산기간 안에서 몇 번째 주인지 */
+    ord: string;
+    /** "7/13~7/19" */
+    span: string;
     dates: string[];
     workedMinutes: number;
     attention: number;
@@ -306,7 +309,8 @@ export default async function Page({
     if (!g) {
       g = {
         key: w.start,
-        label: "",
+        ord: "",
+        span: "",
         dates: [],
         workedMinutes: 0,
         attention: 0,
@@ -323,14 +327,25 @@ export default async function Page({
     }
     if (date === asOfDate) g.hasToday = true;
   }
-  for (const g of weekGroups) {
+  /*
+   * 라벨을 주차 번호로 통일한다.
+   *
+   * 전에는 "7/1 ~ 7/5 · 5일" 처럼 썼는데, 조각 주 때문에 "5일 / 7일" 이 섞이고
+   * 날짜 문자열 폭도 달라서 접힌 줄들이 들쭉날쭉했다. 일수는 날짜 범위가 이미
+   * 말해주므로 지운다. 월 정산에서 사람이 쓰는 단위가 "몇 주차"다.
+   */
+  weekGroups.forEach((g, i) => {
+    g.ord = `${i + 1}주차`;
     const from = label(g.dates[0], zone);
     const to = label(g.dates[g.dates.length - 1], zone);
-    g.label =
+    // 같은 달이면 뒤쪽 월을 지운다 ("7/13~7/19" → "7/13~19"). 390px 에서
+    // 확인 배지까지 한 줄에 들어가려면 이 26px 가 필요했다.
+    const sameMonth = from.md.split("/")[0] === to.md.split("/")[0];
+    g.span =
       g.dates.length === 1
-        ? `${from.md}(${from.dow})`
-        : `${from.md} ~ ${to.md} · ${g.dates.length}일`;
-  }
+        ? from.md
+        : `${from.md}~${sameMonth ? to.md.split("/")[1] : to.md}`;
+  });
 
   return (
     <main className="page">
@@ -687,13 +702,23 @@ export default async function Page({
           */
           weekGroups.map((g) => (
             <details className="weekgroup" key={g.key} open={g.hasToday}>
+              {/*
+                합계를 맨 끝에 둔다. 배지·칩을 합계 뒤에 두면 그 폭만큼
+                합계가 왼쪽으로 밀려서 줄마다 열이 어긋났다.
+              */}
               <summary>
-                <span className="range">{g.label}</span>
-                <span className="sum">{hm(g.workedMinutes)}</span>
-                {g.attention > 0 && (
+                <span className="ord">{g.ord}</span>
+                <span className="span">{g.span}</span>
+                {/*
+                  배지는 "접혀서 안 보이는데 확인할 게 있다"는 신호다. 펼쳐진
+                  이번 주에는 아래 줄에 그대로 보이니 붙이지 않는다. 덕분에
+                  배지와 "이번 주"가 한 줄에 겹치는 경우가 없어진다.
+                */}
+                {g.attention > 0 && !g.hasToday && (
                   <span className="badge">확인 {g.attention}</span>
                 )}
                 {g.hasToday && <span className="now">이번 주</span>}
+                <span className="sum">{hm(g.workedMinutes)}</span>
               </summary>
               <ul className="daybars">{g.dates.map(dayRow)}</ul>
             </details>
