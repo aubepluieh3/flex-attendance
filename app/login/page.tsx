@@ -1,4 +1,5 @@
 import { redirect } from "next/navigation";
+import Link from "next/link";
 import { optionalViewer } from "../viewer";
 import { LoginForm } from "./form";
 
@@ -63,6 +64,11 @@ export default async function LoginPage({
         <section className="card">
           <LoginForm next={target} />
         </section>
+
+        {/* 처음 온 사람은 이게 무슨 앱인지부터 알아야 한다 */}
+        <p className="empty" style={{ marginTop: 14 }}>
+          <Link href="/intro">자율 출근제가 이 앱에서 어떻게 되는지 보기</Link>
+        </p>
 
         {process.env.NODE_ENV !== "production" && (
           <p className="empty" style={{ lineHeight: 1.9 }}>
