@@ -146,8 +146,17 @@ export const orgs = pgTable("orgs", {
     .notNull()
     .default(8 * 60),
 
-  // 체류시간 ≠ 근무시간. 안 빼면 매일 1시간씩 부풀려진다.
-  breakRules: jsonb("break_rules")
+  /**
+   * **추정 휴게 정책** — 법정 휴게(§54) 부여 기록이 아니다.
+   *
+   * 태그가 in/out 두 개뿐이라 실제로 쉬었는지 알 수 없다. 그래서 체류 길이로
+   * 휴게를 추정해 차감한다. 안 빼면 점심을 찍지 않은 사람의 근무가 매일
+   * 1시간씩 부풀려진다.
+   *
+   * 이 값으로 §54 준수 여부를 판단하면 안 된다 — 추정이 곧 부여 기록은 아니다.
+   * (DB 컬럼명은 break_rules 로 남아 있다. 마이그레이션 없이 TS 이름만 바꿨다)
+   */
+  autoBreakRules: jsonb("break_rules")
     .$type<BreakRule[]>()
     .notNull()
     .default([
@@ -420,7 +429,7 @@ export const workDays = pgTable(
     lastOutAt: timestamp("last_out_at", { withTimezone: true }),
 
     stayMinutes: integer("stay_minutes").notNull().default(0),
-    breakMinutes: integer("break_minutes").notNull().default(0),
+    autoBreakMinutes: integer("break_minutes").notNull().default(0),
     /** 실근무 = stay - break (+ 보정) */
     workMinutes: integer("work_minutes").notNull().default(0),
     /** 야간(22~06시) 겹침 분. 가산 판단용 원자료. 휴게 위치를 모르므로 근사값. */
@@ -621,6 +630,18 @@ export const periodSnapshots = pgTable(
     overtimeMinutes: integer("overtime_minutes").notNull(),
     /** 반올림한 분 */
     avgWeeklyMinutes: integer("avg_weekly_minutes").notNull(),
+
+    /**
+     * 이 스냅샷을 만든 **계산 버전** (lib/attendance/calc-version.ts).
+     *
+     * 스냅샷은 마감 당시의 계산 결과를 보존한다. 계산식을 고치면 지금 값이
+     * 달라지는데, 그건 근태가 바뀐 게 아니라 **기준이 바뀐 것**이다. 버전이
+     * 다르면 단순 값 비교로 "마감 후 값이 바뀌었습니다"를 띄우지 않는다.
+     *
+     * 기존 행에는 도입 시점 버전(1)을 채운다 — 그 값들은 현재 계산식으로
+     * 만들어졌으므로 1이 맞다.
+     */
+    calcVersion: integer("calc_version").notNull().default(1),
 
     capturedAt: timestamp("captured_at", { withTimezone: true })
       .notNull()

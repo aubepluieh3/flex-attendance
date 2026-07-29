@@ -143,7 +143,7 @@ describe("서버 액션은 오류를 기록한다", () => {
 describe("예상 한도 초과는 본인 화면에만 둔다", () => {
   /*
    * 확정 초과(exceedsAvgWeeklyLimit)는 "남은 날을 전부 쉬어도 되돌릴 수 없다"는
-   * 뜻이라 관리자도 알아야 한다. 예상(willExceedAvgWeeklyLimit)은 다르다 —
+   * 뜻이라 관리자도 알아야 한다. 예상(exceedsLimitEvenIfScheduledOnly)은 다르다 —
    * 팀장·HR 화면에 예상 위법이 뜨면 지목된 사람이 줄이는 게 근무가 아니라
    * 기록일 수 있다. 자기신고에 불이익을 붙이는 설계와 같은 종류다.
    *
@@ -157,7 +157,7 @@ describe("예상 한도 초과는 본인 화면에만 둔다", () => {
     "db/team.ts",
     "db/report.ts",
   ];
-  const PROJECTION = ["willExceedAvgWeeklyLimit", "projectedAvgWeeklyMinutes"];
+  const PROJECTION = ["exceedsLimitEvenIfScheduledOnly", "projectedAvgWeeklyMinutes"];
 
   /** 규칙을 설명하는 주석에도 필드 이름이 나오므로 코드만 본다 (clock guard 와 같은 방식) */
   const codeOf = (path: string) =>

@@ -15,7 +15,8 @@ import {
   removeTimeOffAction,
   saveRulesAction,
 } from "./actions";
-import { TIME_OFF_LABEL as KIND_LABEL } from "@/lib/format";
+import { findTargetOverStatutory } from "@/lib/attendance/target-vs-statutory";
+import { hm, TIME_OFF_LABEL as KIND_LABEL } from "@/lib/format";
 
 export const dynamic = "force-dynamic";
 
@@ -66,8 +67,27 @@ export default async function SettingsPage({
     coreTime: a.coreTime,
     flexBand: a.flexBand,
     dailyLimitMinutes: a.dailyLimitMinutes,
-    breakRules: a.breakRules,
+    autoBreakRules: a.autoBreakRules,
   });
+
+  /*
+   * 소정근로가 법정근로 총량을 넘는 기간 — business_days 방식일 때만 생긴다.
+   * fixed 는 기간당 고정 시간이라 영업일 수와 무관하다.
+   * 값을 고치지 않고 성질만 알려준다 (target-vs-statutory.ts 상단 참조).
+   */
+  const overStatutory =
+    rules.settlement.targetCalcMethod === "business_days"
+      ? findTargetOverStatutory({
+          kind: rules.settlementKind,
+          weekStartDay: rules.weekStartDay,
+          timezone: zone,
+          weekendDays: rules.settlement.weekendDays,
+          holidays: rules.settlement.holidays,
+          standardMinutesPerDay: rules.settlement.standardMinutesPerDay,
+          legalWeeklyMinutes: rules.settlement.legalWeeklyMinutes,
+          from: now(),
+        })
+      : [];
 
   const holidayRows = await listHolidays(viewer.orgId);
   const people = await listUsers();
@@ -89,9 +109,9 @@ export default async function SettingsPage({
   const timeOffRows = await listTimeOff(viewer.orgId, offFrom, offTo);
 
   const break4 =
-    a.breakRules.find((r) => r.overHours === 4)?.deductMinutes ?? 30;
+    a.autoBreakRules.find((r) => r.overHours === 4)?.deductMinutes ?? 30;
   const break8 =
-    a.breakRules.find((r) => r.overHours === 8)?.deductMinutes ?? 60;
+    a.autoBreakRules.find((r) => r.overHours === 8)?.deductMinutes ?? 60;
 
   return (
     <main className="page">
@@ -239,6 +259,35 @@ export default async function SettingsPage({
                 defaultValue={hours(rules.settlement.maxAvgWeeklyMinutes)}
               />
             </label>
+            {/*
+              소정근로와 법정 총량은 기준이 다르다 —
+                소정근로  = 영업일 × 1일 소정근로
+                법정 총량 = 역일 ÷ 7 × 40시간 (§50)
+              그래서 영업일이 많은 달에는 소정근로를 정확히 채우기만 해도
+              연장근로가 발생한다. 앱은 소정근로를 깎지 않는다(§2①7호로 당사자가
+              정하는 값이다). 대신 이 성질을 상시 보여준다.
+            */}
+            {overStatutory.length > 0 && (
+              <p className="empty" style={{ gridColumn: "1 / -1", margin: 0 }}>
+                <b>
+                  현재 산정 방식에서는 월별 영업일 수에 따라 소정근로시간이
+                  법정근로 총량을 초과할 수 있습니다.
+                </b>
+                <br />
+                앞으로 1년 중 {overStatutory.length}개 기간이 여기 걸립니다 —{" "}
+                {overStatutory
+                  .slice(0, 4)
+                  .map(
+                    (m) =>
+                      `${m.label}: 소정근로 ${hm(m.targetMinutes)} / 법정근로 총량 약 ${hm(m.statutoryMinutes)} (+${hm(m.overMinutes)})`,
+                  )
+                  .join(" · ")}
+                {overStatutory.length > 4 && ` 외 ${overStatutory.length - 4}개`}
+                <br />
+                초과분은 연장근로이며 가산수당 대상입니다(§56). 앱은 소정근로를
+                법정 총량으로 자동 보정하지 않습니다.
+              </p>
+            )}
             <label className="field">
               <span>날짜 귀속 기준시각</span>
               <input

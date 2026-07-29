@@ -1,5 +1,5 @@
 import { DateTime, Interval } from "luxon";
-import { breakMinutesFor, resolveWorkDate } from "./compute";
+import { autoBreakMinutesFor, resolveWorkDate } from "./compute";
 import type {
   AttendanceRules,
   ComputedDay,
@@ -229,11 +229,11 @@ export function computeWorkDaysFromSessions(
 
     // 실근무: 합쳐진 구간마다 휴게를 적용한다
     let workMinutes = 0;
-    let breakMinutes = 0;
+    let autoBreakMinutes = 0;
     for (const iv of intervals) {
       const span = Math.round(iv.length("minutes"));
-      const deduct = breakMinutesFor(span, rules.breakRules);
-      breakMinutes += deduct;
+      const deduct = autoBreakMinutesFor(span, rules.autoBreakRules);
+      autoBreakMinutes += deduct;
       workMinutes += Math.max(0, span - deduct);
     }
 
@@ -284,7 +284,7 @@ export function computeWorkDaysFromSessions(
       firstInAt,
       lastOutAt,
       stayMinutes: lastOutAt ? minutesBetween(firstInAt, lastOutAt) : 0,
-      breakMinutes,
+      autoBreakMinutes,
       // 진행 중인 날은 아직 확정 근무시간이 아니다. 완료된 세션만 센다.
       workMinutes,
       nightMinutes: nightOverlap(intervals, rules),
@@ -356,7 +356,7 @@ export function minutesIncludingOpen(
   if (!day.openSince) return day.workMinutes;
   const span = minutesBetween(day.openSince, asOf);
   if (span <= 0) return day.workMinutes;
-  const deduct = breakMinutesFor(span, rules.breakRules);
+  const deduct = autoBreakMinutesFor(span, rules.autoBreakRules);
   return day.workMinutes + Math.max(0, span - deduct);
 }
 
@@ -368,7 +368,7 @@ export function stayForWork(
   let stay = targetWork;
   // 휴게 규칙은 계단식이라 몇 번이면 수렴한다
   for (let i = 0; i < 4; i++) {
-    const next = targetWork + breakMinutesFor(stay, rules.breakRules);
+    const next = targetWork + autoBreakMinutesFor(stay, rules.autoBreakRules);
     if (next === stay) break;
     stay = next;
   }
@@ -394,7 +394,7 @@ export function leaveTimeFor(opts: {
   const spanSoFar = Math.max(0, minutesBetween(openSince, asOf));
   const workSoFar = Math.max(
     0,
-    spanSoFar - breakMinutesFor(spanSoFar, rules.breakRules),
+    spanSoFar - autoBreakMinutesFor(spanSoFar, rules.autoBreakRules),
   );
   const targetSessionWork = workSoFar + neededMinutes;
   const requiredSpan = stayForWork(targetSessionWork, rules);

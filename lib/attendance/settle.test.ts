@@ -41,7 +41,7 @@ const d = (
   firstInAt: null,
   lastOutAt: null,
   stayMinutes: workMinutes,
-  breakMinutes: 0,
+  autoBreakMinutes: 0,
   workMinutes,
   nightMinutes: 0,
   isHoliday: false,
@@ -632,7 +632,7 @@ describe("한도 초과를 기간이 끝나기 전에 알린다", () => {
     // 아직 하한에는 안 걸린다 — 남은 17영업일을 소정근로만 하면 206시간
     expect(s.remainingBusinessDays).toBe(17);
     expect(s.remainingScheduledMinutes).toBe(17 * 8 * 60);
-    expect(s.willExceedAvgWeeklyLimit).toBe(false);
+    expect(s.exceedsLimitEvenIfScheduledOnly).toBe(false);
   });
 
   it("10영업일 뒤 140시간 — 소정근로만 더해도 넘으므로 경고", () => {
@@ -646,7 +646,7 @@ describe("한도 초과를 기간이 끝나기 전에 알린다", () => {
     expect(s.exceedsAvgWeeklyLimit).toBe(false);
     // 140h + 남은 12영업일 × 8h = 236h > 한도 230.3h
     expect(s.remainingBusinessDays).toBe(12);
-    expect(s.willExceedAvgWeeklyLimit).toBe(true);
+    expect(s.exceedsLimitEvenIfScheduledOnly).toBe(true);
   });
 
   it("남은 날에 휴가가 있으면 그만큼 빼고 판정한다", () => {
@@ -665,7 +665,7 @@ describe("한도 초과를 기간이 끝나기 전에 알린다", () => {
     );
 
     expect(s.remainingScheduledMinutes).toBe(11 * 8 * 60);
-    expect(s.willExceedAvgWeeklyLimit).toBe(false);
+    expect(s.exceedsLimitEvenIfScheduledOnly).toBe(false);
   });
 
   it("반차는 절반만 빠진다", () => {
@@ -682,7 +682,7 @@ describe("한도 초과를 기간이 끝나기 전에 알린다", () => {
 
     expect(s.remainingScheduledMinutes).toBe(12 * 8 * 60 - 4 * 60);
     // 4시간만 빠지면 여전히 넘는다
-    expect(s.willExceedAvgWeeklyLimit).toBe(true);
+    expect(s.exceedsLimitEvenIfScheduledOnly).toBe(true);
   });
 
   it("기간이 끝나면 예상과 확정이 같은 말을 한다", () => {
@@ -697,11 +697,11 @@ describe("한도 초과를 기간이 끝나기 전에 알린다", () => {
 
     const under = finished(8 * 60);
     expect(under.remainingScheduledMinutes).toBe(0);
-    expect(under.willExceedAvgWeeklyLimit).toBe(under.exceedsAvgWeeklyLimit);
+    expect(under.exceedsLimitEvenIfScheduledOnly).toBe(under.exceedsAvgWeeklyLimit);
     expect(under.exceedsAvgWeeklyLimit).toBe(false);
 
     const over = finished(11 * 60);
-    expect(over.willExceedAvgWeeklyLimit).toBe(over.exceedsAvgWeeklyLimit);
+    expect(over.exceedsLimitEvenIfScheduledOnly).toBe(over.exceedsAvgWeeklyLimit);
     expect(over.exceedsAvgWeeklyLimit).toBe(true);
   });
 
@@ -710,7 +710,7 @@ describe("한도 초과를 기간이 끝나기 전에 알린다", () => {
     expect(s.elapsedBusinessDays).toBe(0);
     expect(s.remainingBusinessDays).toBe(22);
     // 소정근로만 다 해도 176시간 — 한도 아래다
-    expect(s.willExceedAvgWeeklyLimit).toBe(false);
+    expect(s.exceedsLimitEvenIfScheduledOnly).toBe(false);
   });
 });
 

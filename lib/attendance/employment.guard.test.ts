@@ -116,7 +116,7 @@ describe("불변식 1 — 법정 총량·한도의 분모는 개인 집계 대�
       firstInAt: null,
       lastOutAt: null,
       stayMinutes: 12 * 60,
-      breakMinutes: 0,
+      autoBreakMinutes: 0,
       workMinutes: 12 * 60,
       nightMinutes: 0,
       isHoliday: false,

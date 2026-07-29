@@ -1,5 +1,5 @@
 import { DateTime } from "luxon";
-import { breakMinutesFor } from "./compute";
+import { autoBreakMinutesFor } from "./compute";
 import { stayForWork } from "./sessions";
 import type { AttendanceRules, ComputedDay } from "./types";
 
@@ -59,7 +59,7 @@ export function estimateCheckout(
 
   return {
     lastOutAt,
-    workMinutes: Math.max(0, stay - breakMinutesFor(stay, rules.breakRules)),
+    workMinutes: Math.max(0, stay - autoBreakMinutesFor(stay, rules.autoBreakRules)),
     source: useHistory ? "history" : "standard",
     sampleDays: stays.length,
   };

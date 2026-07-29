@@ -101,7 +101,7 @@ async function recentCompleted(
     firstInAt: r.firstInAt,
     lastOutAt: r.lastOutAt,
     stayMinutes: r.stayMinutes,
-    breakMinutes: r.breakMinutes,
+    autoBreakMinutes: r.autoBreakMinutes,
     workMinutes: r.workMinutes,
     nightMinutes: r.nightMinutes,
     isHoliday: r.isHoliday,

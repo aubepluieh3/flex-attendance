@@ -20,7 +20,7 @@ export type AttendanceRules = {
   timezone: string;
   /** 이 시각 이전의 태그는 전날로 귀속한다 (야근이 다음 날로 넘어가지 않게) */
   dayBoundaryHour: number;
-  breakRules: BreakRule[];
+  autoBreakRules: BreakRule[];
 
   /**
    * 의무근로시간대. 이 구간에 자리를 비우면 규정 위반이다.
@@ -70,7 +70,7 @@ export type ComputedDay = {
   lastOutAt: Date | null;
   /** 첫 태그 ~ 마지막 태그 */
   stayMinutes: number;
-  breakMinutes: number;
+  autoBreakMinutes: number;
   /** 실근무 = stay - break. 집계에 쓰는 값. */
   workMinutes: number;
   /**

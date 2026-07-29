@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { DateTime } from "luxon";
-import { applyAdjustment, breakMinutesFor, nightMinutesFor } from "./compute";
+import { applyAdjustment, autoBreakMinutesFor, nightMinutesFor } from "./compute";
 import { computeWorkDays as computeFromSessions } from "./sessions";
 import type { AttendanceRules, ComputedDay, TagInput } from "./types";
 
@@ -13,7 +13,7 @@ import type { AttendanceRules, ComputedDay, TagInput } from "./types";
 const base: AttendanceRules = {
   timezone: "Asia/Seoul",
   dayBoundaryHour: 5,
-  breakRules: [
+  autoBreakRules: [
     { overHours: 4, deductMinutes: 30 },
     { overHours: 8, deductMinutes: 60 },
   ],
@@ -186,7 +186,7 @@ describe("휴게 차감 (§54) — 체류시간 ≠ 근무시간", () => {
 
   for (const [name, stay, expected] of cases) {
     it(name, () => {
-      expect(breakMinutesFor(stay, base.breakRules)).toBe(expected);
+      expect(autoBreakMinutesFor(stay, base.autoBreakRules)).toBe(expected);
     });
   }
 
@@ -419,7 +419,7 @@ describe("예외 보정", () => {
     expect(d.status).toBe("adjusted");
     expect(d.tagCount).toBe(0);
     // 외근은 사용자가 실근무 시간을 넣는다 — 휴게를 또 빼지 않는다
-    expect(d.breakMinutes).toBe(0);
+    expect(d.autoBreakMinutes).toBe(0);
     // 시각을 모르므로 코어타임을 판정하지 않는다
     expect(d.flags).not.toContain("core_time_violation");
   });
@@ -439,7 +439,7 @@ describe("예외 보정", () => {
     );
 
     expect(fixed.stayMinutes).toBe(14 * 60);
-    expect(fixed.breakMinutes).toBe(60);
+    expect(fixed.autoBreakMinutes).toBe(60);
     expect(fixed.workMinutes).toBe(13 * 60);
     expect(fixed.nightMinutes).toBe(60);
     expect(fixed.status).toBe("adjusted");

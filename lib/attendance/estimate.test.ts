@@ -7,7 +7,7 @@ const zone = "Asia/Seoul";
 const rules: AttendanceRules = {
   timezone: zone,
   dayBoundaryHour: 5,
-  breakRules: [
+  autoBreakRules: [
     { overHours: 4, deductMinutes: 30 },
     { overHours: 8, deductMinutes: 60 },
   ],
@@ -28,7 +28,7 @@ const day = (stayMinutes: number): ComputedDay => ({
   firstInAt: null,
   lastOutAt: null,
   stayMinutes,
-  breakMinutes: 0,
+  autoBreakMinutes: 0,
   workMinutes: stayMinutes,
   nightMinutes: 0,
   isHoliday: false,

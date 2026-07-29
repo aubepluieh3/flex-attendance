@@ -37,13 +37,13 @@ export function resolveWorkDate(
  * 법정 기준은 '근로시간' 기반이지만(근로기준법 §54) 근로시간은 휴게를 뺀 값이라
  * 순환이 된다. 실무 시스템이 하는 대로 체류시간을 대리 지표로 쓴다.
  */
-export function breakMinutesFor(
+export function autoBreakMinutesFor(
   stayMinutes: number,
-  breakRules: BreakRule[],
+  autoBreakRules: BreakRule[],
 ): number {
   let deduct = 0;
   let matchedOver = -1;
-  for (const rule of breakRules) {
+  for (const rule of autoBreakRules) {
     if (stayMinutes >= rule.overHours * 60 && rule.overHours > matchedOver) {
       matchedOver = rule.overHours;
       deduct = rule.deductMinutes;
@@ -130,8 +130,8 @@ function summarize(
   const stayMinutes = Math.round(
     (lastOutAt.getTime() - firstInAt.getTime()) / 60_000,
   );
-  const breakMinutes = breakMinutesFor(stayMinutes, rules.breakRules);
-  const workMinutes = Math.max(0, stayMinutes - breakMinutes);
+  const autoBreakMinutes = autoBreakMinutesFor(stayMinutes, rules.autoBreakRules);
+  const workMinutes = Math.max(0, stayMinutes - autoBreakMinutes);
   const isHoliday = isHolidayDate(workDate, rules);
 
   const inAt = DateTime.fromJSDate(firstInAt, { zone });
@@ -160,7 +160,7 @@ function summarize(
     firstInAt,
     lastOutAt,
     stayMinutes,
-    breakMinutes,
+    autoBreakMinutes,
     workMinutes,
     nightMinutes: nightMinutesFor(firstInAt, lastOutAt, rules),
     isHoliday,
@@ -180,7 +180,7 @@ function emptyDay(workDate: string, rules: AttendanceRules): ComputedDay {
     firstInAt: null,
     lastOutAt: null,
     stayMinutes: 0,
-    breakMinutes: 0,
+    autoBreakMinutes: 0,
     workMinutes: 0,
     nightMinutes: 0,
     isHoliday: isHolidayDate(workDate, rules),

@@ -504,7 +504,7 @@ export default async function Page({
         52시간 초과는 위법 소지인데 "목표 달성" 축하 화면에 묻히면 안 된다.
         실제로 존재하는 숫자만 1급으로 둔다 (예측값은 아래 타일로).
 
-        예측(willExceedAvgWeeklyLimit)으로 칸을 하나 더 만들지는 않았다.
+        예측(exceedsLimitEvenIfScheduledOnly)으로 칸을 하나 더 만들지는 않았다.
         예측은 주말마다 켜졌다 꺼진다 (settle.ts 의 오늘 겹침) — 최상단으로
         올리면 화면에서 가장 큰 요소가 주 단위로 깜빡인다. 대신 2칸 안에서
         배지와 숫자로만 말한다. 같은 행동을 요구하므로 칸을 가를 필요가 없다.
@@ -539,7 +539,7 @@ export default async function Page({
             */}
             <div className="label">이번 정산기간 소정근로</div>
             <div className="figure">채웠습니다</div>
-            {summary.willExceedAvgWeeklyLimit ? (
+            {summary.exceedsLimitEvenIfScheduledOnly ? (
               <div className="status warn">
                 <span className="dot" aria-hidden="true" />
                 여기서 줄이세요 · 이대로면 주 평균{" "}
@@ -676,11 +676,36 @@ export default async function Page({
         summary.flaggedDates.length === 0 &&
         summary.timeOffConflicts.length === 0 &&
         !summary.exceedsAvgWeeklyLimit &&
-        !summary.willExceedAvgWeeklyLimit &&
-        !periodState.diff?.changed ? (
+        !summary.exceedsLimitEvenIfScheduledOnly &&
+        !periodState.diff?.changed &&
+        (periodState.diff?.comparable ?? true) ? (
           <p className="empty">확인할 항목이 없습니다.</p>
         ) : (
           <ul className="issues">
+            {/*
+              계산 기준이 바뀐 기간은 값을 비교하지 않는다. 차이가 나도 그건
+              근태가 바뀐 게 아니라 기준이 바뀐 것이라 "마감 후 변경"이 아니다.
+              숨기지 않고 상태로 말한다 — 왜 비교가 없는지 알려줘야 한다.
+            */}
+            {periodState.diff && !periodState.diff.comparable && (
+              <li>
+                <span className="icon warn" aria-hidden="true">
+                  !
+                </span>
+                <span>
+                  <span className="what">
+                    계산 기준이 변경되어 현재 값과 직접 비교하지 않습니다
+                  </span>
+                  <br />
+                  <span className="why">
+                    이 기간은 계산 기준 {periodState.diff.snapshotCalcVersion}
+                    으로 마감됐고 지금은{" "}
+                    {periodState.diff.currentCalcVersion} 입니다. 공식 기록은
+                    마감 시점 값입니다.
+                  </span>
+                </span>
+              </li>
+            )}
             {periodState.diff?.changed && (
               <li>
                 <span className="icon crit" aria-hidden="true">
@@ -728,7 +753,7 @@ export default async function Page({
               아니라 기록일 수 있다 (자기신고에 불이익을 붙이는 설계).
             */}
             {!summary.exceedsAvgWeeklyLimit &&
-              summary.willExceedAvgWeeklyLimit && (
+              summary.exceedsLimitEvenIfScheduledOnly && (
                 <li>
                   <span className="icon crit" aria-hidden="true">
                     !
@@ -917,7 +942,7 @@ export default async function Page({
                     <td>{clock(d.firstInAt, zone) ?? "—"}</td>
                     <td>{clock(d.lastOutAt, zone) ?? "—"}</td>
                     <td>{d.stayMinutes ? hm(d.stayMinutes) : "—"}</td>
-                    <td>{d.breakMinutes ? hm(d.breakMinutes) : "—"}</td>
+                    <td>{d.autoBreakMinutes ? hm(d.autoBreakMinutes) : "—"}</td>
                     <td>
                       {d.status === "incomplete" ? "—" : hm(d.workMinutes)}
                     </td>

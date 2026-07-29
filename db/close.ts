@@ -21,6 +21,7 @@ import {
   type SnapshotDiff,
 } from "@/lib/attendance/settle";
 import type { ComputedDay } from "@/lib/attendance/types";
+import { CALC_VERSION } from "@/lib/attendance/calc-version";
 import { now } from "@/lib/clock";
 
 /**
@@ -74,7 +75,7 @@ async function summaryFor(
     firstInAt: r.firstInAt,
     lastOutAt: r.lastOutAt,
     stayMinutes: r.stayMinutes,
-    breakMinutes: r.breakMinutes,
+    autoBreakMinutes: r.autoBreakMinutes,
     workMinutes: r.workMinutes,
     nightMinutes: r.nightMinutes,
     isHoliday: r.isHoliday,
@@ -244,6 +245,9 @@ export async function closeDuePeriods(
               periodId: period.id,
               userId: member.id,
               ...snapshotOf(summary),
+              // 어떤 계산식으로 만든 값인지 같이 얼린다. 계산을 고치면 지금
+              // 값과 달라지는데 그건 근태가 아니라 기준이 바뀐 것이다.
+              calcVersion: CALC_VERSION,
             });
             n += 1;
           }
@@ -408,7 +412,9 @@ export async function loadPeriodState(
     status: "closed",
     closedAt: period.closedAt,
     snapshot,
-    diff: diffAgainstSnapshot(snapshot, current),
+    // 스냅샷의 계산 버전을 넘긴다. 지금과 다르면 값을 비교하지 않는다 —
+    // 기준이 바뀐 걸 "마감 후 변경"으로 띄우면 거짓 경보가 된다.
+    diff: diffAgainstSnapshot(snapshot, current, row.calcVersion),
   };
 }
 

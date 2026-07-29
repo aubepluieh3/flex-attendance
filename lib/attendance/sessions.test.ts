@@ -13,7 +13,7 @@ const zone = "Asia/Seoul";
 const rules: AttendanceRules = {
   timezone: zone,
   dayBoundaryHour: 5,
-  breakRules: [
+  autoBreakRules: [
     { overHours: 4, deductMinutes: 30 },
     { overHours: 8, deductMinutes: 60 },
   ],
@@ -64,7 +64,7 @@ describe("하루 여러 번 나눠 일하기 — 기획서 핵심 요구", () =>
       rules,
       asOf,
     );
-    expect(day.breakMinutes).toBe(0);
+    expect(day.autoBreakMinutes).toBe(0);
   });
 
   it("연속 9시간 한 세션은 법정 휴게 1시간이 붙는다", () => {
@@ -73,7 +73,7 @@ describe("하루 여러 번 나눠 일하기 — 기획서 핵심 요구", () =>
       rules,
       asOf,
     );
-    expect(day.breakMinutes).toBe(60);
+    expect(day.autoBreakMinutes).toBe(60);
     expect(day.workMinutes).toBe(8 * 60);
   });
 
@@ -86,7 +86,7 @@ describe("하루 여러 번 나눠 일하기 — 기획서 핵심 요구", () =>
       rules,
       asOf,
     );
-    expect(day.breakMinutes).toBe(60); // 30 + 30
+    expect(day.autoBreakMinutes).toBe(60); // 30 + 30
     expect(day.workMinutes).toBe(9 * 60);
   });
 
@@ -101,7 +101,7 @@ describe("하루 여러 번 나눠 일하기 — 기획서 핵심 요구", () =>
     );
     // 09~18 = 9시간, 휴게 1시간
     expect(day.workMinutes).toBe(8 * 60);
-    expect(day.breakMinutes).toBe(60);
+    expect(day.autoBreakMinutes).toBe(60);
   });
 });
 

@@ -17,6 +17,7 @@
  */
 import { DateTime } from "luxon";
 import type { ComputedDay, DayFlag } from "./types";
+import { CALC_VERSION } from "./calc-version";
 
 /**
  * 정산기간 집계.
@@ -169,7 +170,7 @@ export type PeriodSummary = {
    * 평균 주 52시간 초과 — 위법 소지.
    *
    * 기간 중에 true 가 되면 "남은 날을 전부 쉬어도 되돌릴 수 없다"는 뜻이다.
-   * 정확하지만 늦다. 그 앞 구간은 willExceedAvgWeeklyLimit 가 맡는다.
+   * 정확하지만 늦다. 그 앞 구간은 exceedsLimitEvenIfScheduledOnly 가 맡는다.
    */
   exceedsAvgWeeklyLimit: boolean;
   /** 지금 페이스가 이어질 때 기간 말 주평균. 52시간과 직접 비교할 수 있는 값. */
@@ -180,7 +181,7 @@ export type PeriodSummary = {
    * 페이스 외삽이 아니라 하한이다 — "며칠 지나야 경고할지" 같은 임의 문턱이
    * 필요 없고, 반박도 되지 않는다. 외삽보다 늦게, 확정보다 이르게 켜진다.
    */
-  willExceedAvgWeeklyLimit: boolean;
+  exceedsLimitEvenIfScheduledOnly: boolean;
   /** 남은 영업일에 예정된 소정근로 (승인된 휴가는 빼고) */
   remainingScheduledMinutes: number;
 
@@ -205,9 +206,22 @@ export type PeriodSnapshot = {
 };
 
 export type SnapshotDiff = {
+  /**
+   * 값을 직접 비교할 수 있나.
+   *
+   * false 면 스냅샷이 지금과 **다른 계산 버전**으로 만들어졌다는 뜻이다.
+   * 값 차이는 근태가 바뀐 게 아니라 기준이 바뀐 것이므로 "마감 후 변경"으로
+   * 읽으면 안 된다. 화면은 대신 "계산 기준이 변경되어 현재 값과 직접
+   * 비교하지 않습니다"를 보여준다.
+   */
+  comparable: boolean;
+  /** 비교했을 때 달라졌나. comparable 이 false 면 항상 false. */
   changed: boolean;
-  /** 현재값 − 스냅샷. 0인 항목은 담지 않는다. */
+  /** 현재값 − 스냅샷. 0인 항목은 담지 않는다. 비교 불가면 빈 객체. */
   deltas: Partial<Record<keyof PeriodSnapshot, number>>;
+  /** 스냅샷을 만든 계산 버전 (화면에 적어줄 수 있게) */
+  snapshotCalcVersion: number;
+  currentCalcVersion: number;
 };
 
 export function snapshotOf(s: PeriodSummary): PeriodSnapshot {
@@ -247,11 +261,28 @@ export function isClosable(
  *
  * 임포트를 막지 않는 이유: 원본은 append-only여야 하고, 막으면 데이터가 유실된다.
  * 대신 공식 기록은 스냅샷을 쓰고 차이를 눈에 보이게 만든다.
+ *
+ * ⚠ **계산 버전이 다르면 비교하지 않는다.** 계산식을 고치면 지금 값이
+ * 달라지는데 그건 근태가 바뀐 게 아니라 기준이 바뀐 것이다. 그걸 "마감 후
+ * 변경"으로 띄우면 마감된 모든 기간에 거짓 경보가 뜬다.
+ * 버전을 올리는 기준은 lib/attendance/calc-version.ts 에 있다.
  */
 export function diffAgainstSnapshot(
   snapshot: PeriodSnapshot,
   current: PeriodSummary,
+  /** 스냅샷을 만든 계산 버전. 없으면 도입 시점(1)으로 본다 */
+  snapshotCalcVersion = 1,
 ): SnapshotDiff {
+  if (snapshotCalcVersion !== CALC_VERSION) {
+    return {
+      comparable: false,
+      changed: false,
+      deltas: {},
+      snapshotCalcVersion,
+      currentCalcVersion: CALC_VERSION,
+    };
+  }
+
   const now = snapshotOf(current);
   const deltas: Partial<Record<keyof PeriodSnapshot, number>> = {};
 
@@ -260,7 +291,13 @@ export function diffAgainstSnapshot(
     if (delta !== 0) deltas[key] = delta;
   }
 
-  return { changed: Object.keys(deltas).length > 0, deltas };
+  return {
+    comparable: true,
+    changed: Object.keys(deltas).length > 0,
+    deltas,
+    snapshotCalcVersion,
+    currentCalcVersion: CALC_VERSION,
+  };
 }
 
 function eachDate(start: string, end: string, zone: string): string[] {
@@ -431,7 +468,7 @@ export function computePeriodSummary(
    * 쉬어도 위법이다. 그 사이 구간을 두 값으로 채운다 —
    *
    *   projectedAvgWeeklyMinutes  지금 페이스가 이어질 때의 기간 말 주평균 (중립 정보)
-   *   willExceedAvgWeeklyLimit   남은 날을 소정근로만 해도 넘는가 (경고)
+   *   exceedsLimitEvenIfScheduledOnly   남은 날을 소정근로만 해도 넘는가 (경고)
    *
    * 뒤쪽은 외삽이 아니라서 임의 문턱이 필요 없다. 대신 남은 영업일에
    * 승인된 휴가가 있으면 그날 몫을 뺀다. 안 빼면 월말에 휴가를 낸 사람이
@@ -474,7 +511,7 @@ export function computePeriodSummary(
   );
 
   const limitTotalMinutes = weeks * rules.maxAvgWeeklyMinutes;
-  const willExceedAvgWeeklyLimit =
+  const exceedsLimitEvenIfScheduledOnly =
     workedMinutes + remainingScheduledMinutes > limitTotalMinutes;
   const projectedAvgWeeklyMinutes = weeks > 0 ? projectedMinutes / weeks : 0;
 
@@ -543,7 +580,7 @@ export function computePeriodSummary(
     overtimeMinutes,
     exceedsAvgWeeklyLimit,
     projectedAvgWeeklyMinutes,
-    willExceedAvgWeeklyLimit,
+    exceedsLimitEvenIfScheduledOnly,
     remainingScheduledMinutes,
     incompleteDates,
     flaggedDates,

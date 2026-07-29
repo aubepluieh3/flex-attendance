@@ -21,7 +21,7 @@ export const DEMO_PASSWORD = "flex-demo-1234";
 export const demoAttendanceRules: AttendanceRules = {
   timezone: DEMO_ZONE,
   dayBoundaryHour: 5,
-  breakRules: [
+  autoBreakRules: [
     { overHours: 4, deductMinutes: 30 },
     { overHours: 8, deductMinutes: 60 },
   ],

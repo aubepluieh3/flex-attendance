@@ -1,0 +1,1 @@
+ALTER TABLE "period_snapshots" ADD COLUMN "calc_version" integer DEFAULT 1 NOT NULL;

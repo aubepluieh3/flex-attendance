@@ -86,7 +86,7 @@ async function main() {
       targetMinutesPerPeriod: 40 * 60,
       limitMinutesPerWeek: 52 * 60,
       standardMinutesPerDay: 8 * 60,
-      breakRules: a.breakRules,
+      autoBreakRules: a.autoBreakRules,
       dayBoundaryHour: a.dayBoundaryHour,
       coreTimeStart: a.coreTime?.start,
       coreTimeEnd: a.coreTime?.end,

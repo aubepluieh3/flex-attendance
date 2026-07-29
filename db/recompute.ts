@@ -150,7 +150,7 @@ export async function recomputeWorkDays(opts: {
         firstInAt: d.firstInAt,
         lastOutAt: d.lastOutAt,
         stayMinutes: d.stayMinutes,
-        breakMinutes: d.breakMinutes,
+        autoBreakMinutes: d.autoBreakMinutes,
         workMinutes: d.workMinutes,
         nightMinutes: d.nightMinutes,
         isHoliday: d.isHoliday,

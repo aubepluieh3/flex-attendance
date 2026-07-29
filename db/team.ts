@@ -181,7 +181,7 @@ export async function loadTeamRows(
       firstInAt: r.firstInAt,
       lastOutAt: r.lastOutAt,
       stayMinutes: r.stayMinutes,
-      breakMinutes: r.breakMinutes,
+      autoBreakMinutes: r.autoBreakMinutes,
       workMinutes: r.workMinutes,
       nightMinutes: r.nightMinutes,
       isHoliday: r.isHoliday,
@@ -254,7 +254,7 @@ export async function loadTeamRows(
       incomplete: summary.incompleteDates.length,
       violations: summary.flaggedDates.length + summary.timeOffConflicts.length,
       /*
-       * 확정 초과만 본다. summary.willExceedAvgWeeklyLimit(예상)을 여기에
+       * 확정 초과만 본다. summary.exceedsLimitEvenIfScheduledOnly(예상)을 여기에
        * 넣지 말 것 — 예상 위법이 팀장 화면에 뜨면 지목된 사람이 줄이는 게
        * 근무가 아니라 기록일 수 있다. 예상은 본인 화면에만 둔다.
        * (app/ui.guard.test.ts 가 검사한다)

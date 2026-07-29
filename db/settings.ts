@@ -72,10 +72,10 @@ export function ruleWarnings(input: {
   coreTime: { start: string; end: string } | null;
   flexBand: { start: string; end: string } | null;
   dailyLimitMinutes: number | null;
-  breakRules: BreakRule[];
+  autoBreakRules: BreakRule[];
 }): string[] {
   const out: string[] = [];
-  const { coreTime, flexBand, dailyLimitMinutes, breakRules } = input;
+  const { coreTime, flexBand, dailyLimitMinutes, autoBreakRules } = input;
 
   if (coreTime && toMinutes(coreTime.end) <= toMinutes(coreTime.start)) {
     out.push("의무근로시간대의 종료가 시작보다 이르거나 같습니다.");
@@ -94,7 +94,7 @@ export function ruleWarnings(input: {
 
   if (flexBand && dailyLimitMinutes !== null) {
     const width = toMinutes(flexBand.end) - toMinutes(flexBand.start);
-    const deduct = breakRules.reduce(
+    const deduct = autoBreakRules.reduce(
       (max, r) => (width >= r.overHours * 60 ? Math.max(max, r.deductMinutes) : max),
       0,
     );
@@ -139,7 +139,7 @@ export async function updateOrgRules(
     throw new Error("야간근로 시간대는 비울 수 없습니다.");
   }
 
-  const breakRules: BreakRule[] = [
+  const autoBreakRules: BreakRule[] = [
     { overHours: 4, deductMinutes: Math.max(0, input.break4h) },
     { overHours: 8, deductMinutes: Math.max(0, input.break8h) },
   ];
@@ -154,7 +154,7 @@ export async function updateOrgRules(
       standardMinutesPerDay: input.standardMinutesPerDay,
       limitMinutesPerWeek: input.limitMinutesPerWeek,
       dayBoundaryHour: input.dayBoundaryHour,
-      breakRules,
+      autoBreakRules,
       coreTimeStart: coreTime.start,
       coreTimeEnd: coreTime.end,
       flexBandStart: flexBand.start,

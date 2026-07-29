@@ -147,7 +147,7 @@ export async function loadOrgRules(orgId: string): Promise<OrgRules> {
     attendance: {
       timezone: org.timezone,
       dayBoundaryHour: org.dayBoundaryHour,
-      breakRules: org.breakRules,
+      autoBreakRules: org.autoBreakRules,
       coreTime: band(org.coreTimeStart, org.coreTimeEnd),
       flexBand: band(org.flexBandStart, org.flexBandEnd),
       nightWindow: {
@@ -292,7 +292,7 @@ export async function loadWorkDays(
     firstInAt: r.firstInAt,
     lastOutAt: r.lastOutAt,
     stayMinutes: r.stayMinutes,
-    breakMinutes: r.breakMinutes,
+    autoBreakMinutes: r.autoBreakMinutes,
     workMinutes: r.workMinutes,
     nightMinutes: r.nightMinutes,
     isHoliday: r.isHoliday,
