@@ -503,6 +503,11 @@ export default async function Page({
         히어로 우선순위: 법정 위반 > 목표 달성 > 남은 시간.
         52시간 초과는 위법 소지인데 "목표 달성" 축하 화면에 묻히면 안 된다.
         실제로 존재하는 숫자만 1급으로 둔다 (예측값은 아래 타일로).
+
+        예측(willExceedAvgWeeklyLimit)으로 칸을 하나 더 만들지는 않았다.
+        예측은 주말마다 켜졌다 꺼진다 (settle.ts 의 오늘 겹침) — 최상단으로
+        올리면 화면에서 가장 큰 요소가 주 단위로 깜빡인다. 대신 2칸 안에서
+        배지와 숫자로만 말한다. 같은 행동을 요구하므로 칸을 가를 필요가 없다.
       */}
       <section className="card hero">
         {summary.exceedsAvgWeeklyLimit ? (
@@ -521,15 +526,42 @@ export default async function Page({
           </>
         ) : summary.remainingMinutes === 0 ? (
           <>
+            {/*
+              목표를 채운 사람에게도 한도 위험이 있을 수 있다.
+              김도윤 실측 — 채웠습니다(초록) 밑에서 예상 주평균 54시간 16분이
+              빨강이고, 확정 법정초과가 31시간 58분 쌓여 있었다. 그런데 그
+              숫자는 위 1칸 안에만 있어서 본인 화면에 아예 안 나왔다.
+
+              칸을 따로 만들어 초록을 밀어내지는 않는다. 두 메시지가 요구하는
+              행동이 **같기 때문**이다 — "채웠으니 더 안 해도 된다"와 "이대로면
+              넘으니 줄여라"는 둘 다 덜 일하라는 말이다. 가를 게 아니라 한 번에
+              말하면 된다. 대신 배지를 축하에서 주의로 바꾸고, 없던 숫자를 넣는다.
+            */}
             <div className="label">이번 정산기간 소정근로</div>
             <div className="figure">채웠습니다</div>
-            <div className="status good">
-              <span className="dot" aria-hidden="true" />
-              목표 달성
-            </div>
+            {summary.willExceedAvgWeeklyLimit ? (
+              <div className="status warn">
+                <span className="dot" aria-hidden="true" />
+                여기서 줄이세요 · 이대로면 주 평균{" "}
+                {hm(rules.settlement.maxAvgWeeklyMinutes)} 초과
+              </div>
+            ) : (
+              <div className="status good">
+                <span className="dot" aria-hidden="true" />
+                목표 달성
+              </div>
+            )}
             <div className="note">
               누적 {hm(summary.workedMinutes)} / 목표{" "}
               {hm(summary.targetMinutes)}
+              {/*
+                법정초과는 willExceed 와 무관하게 보여준다. 소정근로가 법정
+                총량보다 큰 달(7월은 목표 184시간 vs 법정 총량 177시간 9분)에는
+                목표만 정확히 채워도 연장근로가 생긴다. 그 사실이 화면에
+                없으면 본인은 모르고 급여 쪽에서만 안다.
+              */}
+              {summary.overtimeMinutes > 0 &&
+                ` · 법정초과 ${hm(summary.overtimeMinutes)}`}
             </div>
           </>
         ) : (
