@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import Link from "next/link";
+import { optionalViewer } from "../viewer";
 import "./intro.css";
 
 /*
@@ -381,7 +382,16 @@ function ShotTeam() {
   );
 }
 
-export default function IntroPage() {
+export default async function IntroPage() {
+  /*
+   * 이 페이지는 CSS 로 앱 껍데기를 벗기 때문에(intro.css 상단) 로그인한
+   * 사람에게는 사이드바가 안 보인다. 돌아갈 길을 버튼으로 준다.
+   */
+  const viewer = await optionalViewer();
+  const enter = viewer
+    ? { href: "/", label: "내 근무시간 열기" }
+    : { href: "/login", label: "로그인" };
+
   return (
     <main className="kn">
       {/* ── 표지 ── */}
@@ -406,8 +416,8 @@ export default function IntroPage() {
           </p>
 
           <div className="cta">
-            <Link href="/login" className="solid">
-              로그인
+            <Link href={enter.href} className="solid">
+              {enter.label}
             </Link>
             <a href="#today" className="ghost">
               무엇이 되는지 보기
@@ -543,10 +553,7 @@ export default function IntroPage() {
       </section>
 
       {/* ── 나머지 기능 ── */}
-      <section
-        className="light"
-        style={{ paddingTop: 0, paddingBottom: "clamp(64px, 9vw, 112px)" }}
-      >
+      <section className="light attached">
         <div className="wrap rise">
           <div className="quad">
             <div className="note">
@@ -631,8 +638,8 @@ export default function IntroPage() {
           </p>
 
           <div className="cta">
-            <Link href="/login" className="solid">
-              로그인
+            <Link href={enter.href} className="solid">
+              {enter.label}
             </Link>
           </div>
 

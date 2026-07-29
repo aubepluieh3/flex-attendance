@@ -7,6 +7,23 @@
  * 리듬이 무너진다. 모든 선택자를 .kn 아래에 두어 앱 클래스와 안 섞이게 한다.
  */
 
+/*
+ * 로그인한 채로 열면 이 페이지가 앱 사이드바 옆 좁은 칼럼에 들어갔다.
+ * 232px 을 뺀 폭에서 표지가 눌리고, 사이드바가 끝나는 지점부터 왼쪽에
+ * 흰 띠가 6000px 넘게 남았다.
+ *
+ * 레이아웃(app/layout.tsx)은 경로를 모르기 때문에 서버에서 가를 수 없다.
+ * 그래서 "이 페이지가 안에 있으면 껍데기를 벗는다"를 CSS 로 쓴다.
+ * 대신 로그인한 사람이 앱으로 돌아갈 길이 없어지므로, 표지의 버튼을
+ * viewer 에 따라 바꾼다 (page.tsx).
+ */
+.shell:has(.kn) {
+  display: block;
+}
+.shell:has(.kn) .sidebar {
+  display: none;
+}
+
 .kn {
   --kn-ink: #f5f5f7;
   --kn-ink-dim: #a1a1a6;
@@ -118,7 +135,8 @@
 .kn .top::before {
   content: "";
   position: absolute;
-  inset: -18% -10% auto;
+  /* 좌우로 넘기지 않는다 — 넘치면 가로 스크롤 점검이 매번 여기서 걸린다 */
+  inset: -18% 0 auto;
   height: 620px;
   background: radial-gradient(
     52% 50% at 50% 40%,
@@ -221,6 +239,20 @@
   grid-template-columns: repeat(4, minmax(0, 1fr));
   gap: 20px;
   margin-top: 56px;
+}
+
+/*
+ * 앞 절에 이어 붙는 흰 절. padding-top 을 0 으로 두면 안쪽 첫 요소의
+ * margin-top 이 절 밖으로 빠져나가고(margin collapse), 흰 절과 흰 절
+ * 사이에 .kn 의 검은 배경이 56px 띠로 드러났다. 안쪽 margin 을 여기서
+ * 0 으로 눌러 막는다 — padding 으로 막으면 띠 대신 흰 여백이 두 배가 된다.
+ */
+.kn .attached {
+  padding-top: 0;
+  padding-bottom: clamp(64px, 9vw, 112px);
+}
+.kn .attached .quad {
+  margin-top: 0;
 }
 
 /* 절 안에서 강조하는 숫자 한 줄 */
