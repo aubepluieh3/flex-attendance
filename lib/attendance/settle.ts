@@ -62,19 +62,47 @@ export type SettlementRules = {
 export type PaceStatus = "ahead" | "on_track" | "behind";
 
 export type PeriodInput = {
-  /** YYYY-MM-DD */
+  /** YYYY-MM-DD — 조직 정산기간 */
   periodStart: string;
-  /** YYYY-MM-DD, 포함 */
+  /** YYYY-MM-DD, 포함 — 조직 정산기간 */
   periodEnd: string;
   days: ComputedDay[];
   timeOff: TimeOffEntry[];
   /** 페이스 계산 기준 시각 */
   asOf: Date;
+  /**
+   * 재직기간. 조직 정산기간과 **교집합**을 낸 것이 그 사람의 정산기간이다.
+   *
+   * 중도 입사자에게 기간 전체를 요구하면 소정근로가 틀리고, 더 나쁘게는
+   * 52시간 평균의 분모가 부풀어서 법정 한도 판정이 무력해진다 —
+   * 7/20 입사자가 하루 12시간씩 일해도 주평균 27시간으로 나온다.
+   * 생략하면 기간 전체를 재직으로 본다.
+   */
+  employment?: { hiredAt: string | null; resignedAt: string | null };
 };
 
 export type PeriodSummary = {
+  /** 조직 정산기간 */
   periodStart: string;
   periodEnd: string;
+
+  /**
+   * 그 사람의 정산기간 = 조직 정산기간 ∩ 재직기간.
+   *
+   * 아래 모든 값이 이 구간에서 나온다. 화면에서 조직 기간(periodStart)을
+   * 그 사람의 구간으로 쓰면 안 된다 — 같은 "7월"이 사람마다 다른 구간을 뜻한다.
+   */
+  effectiveStart: string;
+  effectiveEnd: string;
+  /**
+   * 교집합이 비어 있으면 false — 입사 전이거나 퇴사 후의 정산기간이다.
+   *
+   * 이때 숫자를 0으로 두면 "안 일했다"로 읽혀서 미달·진행률에 섞인다.
+   * 화면은 0을 그리지 말고 "재직 기간이 아닙니다"로 대체해야 한다.
+   */
+  employed: boolean;
+  /** 재직이 기간 일부만 겹친다 — 화면에 재직 구간을 병기해야 한다 */
+  partialEmployment: boolean;
 
   businessDays: number;
   /** 소정근로 = 영업일 × 8h − 휴가 차감 */
@@ -240,7 +268,30 @@ export function computePeriodSummary(
   const { periodStart, periodEnd, days, timeOff, asOf } = input;
   const zone = rules.timezone;
 
-  const allDates = eachDate(periodStart, periodEnd, zone);
+  /*
+   * 그 사람의 정산기간 = 조직 정산기간 ∩ 재직기간.
+   *
+   * 여기서 한 번만 좁힌다. allDates 와 businessDates 가 아래 모든 계산의
+   * 출발점이라 — 소정근로, 52시간 분모, 법정총량, 페이스, 사전경고 — 이 두 줄이
+   * 개념을 전부 실어 나른다. 계산마다 재직기간을 따로 확인하는 방식으로 두면
+   * 새 계산을 붙일 때 빠뜨린다.
+   */
+  const hiredAt = input.employment?.hiredAt ?? null;
+  const resignedAt = input.employment?.resignedAt ?? null;
+  const effectiveStart =
+    hiredAt !== null && hiredAt > periodStart ? hiredAt : periodStart;
+  const effectiveEnd =
+    resignedAt !== null && resignedAt < periodEnd ? resignedAt : periodEnd;
+  const employed = effectiveStart <= effectiveEnd;
+  const partialEmployment =
+    employed && (effectiveStart !== periodStart || effectiveEnd !== periodEnd);
+
+  // 조직 기간 영업일 — targetCalcMethod 가 "fixed" 일 때 비례 계산의 분모다
+  const orgBusinessDays = eachDate(periodStart, periodEnd, zone).filter((d) =>
+    isBusinessDay(d, rules),
+  ).length;
+
+  const allDates = employed ? eachDate(effectiveStart, effectiveEnd, zone) : [];
   const businessDates = allDates.filter((d) => isBusinessDay(d, rules));
 
   const inPeriod = new Set(allDates);
@@ -250,9 +301,19 @@ export function computePeriodSummary(
     0,
   );
 
+  /*
+   * "fixed" 는 기간 전체에 대한 총량이므로 부분 재직이면 비례로 깎는다.
+   * 비례 기준은 **소정근로일 수**다 (역일 아님) — 역일로 하면 금요일 입사자와
+   * 월요일 입사자의 목표가 주말 때문에 뒤바뀐다. "business_days" 는 영업일을
+   * 세는 방식이라 위에서 교집합으로 좁힌 것만으로 이미 비례가 끝나 있다.
+   */
   const grossTarget =
     rules.targetCalcMethod === "fixed"
-      ? rules.fixedTargetMinutes
+      ? orgBusinessDays > 0
+        ? Math.round(
+            (rules.fixedTargetMinutes * businessDates.length) / orgBusinessDays,
+          )
+        : 0
       : businessDates.length * rules.standardMinutesPerDay;
   const targetMinutes = Math.max(0, grossTarget - timeOffDeduct);
 
@@ -270,12 +331,15 @@ export function computePeriodSummary(
   // 오늘은 아직 진행 중이므로 페이스 판정에서 제외한다. 오늘을 경과로 세면
   // 아침에는 항상 "뒤처짐", 저녁에는 "앞섬"으로 나와서 지표를 믿을 수 없게 된다.
   // 오늘 실적은 누적(workedMinutes)에는 그대로 들어간다.
+  // 조직 기간이 아니라 재직 구간으로 자른다 — 입사 전 날짜를 경과로 세면
+  // 첫 출근일에 "그동안 못 채웠음"이 되고, 그건 존재하지 않는 근로관계다.
   const asOfDate = DateTime.fromJSDate(asOf, { zone }).toISODate()!;
-  const paceCutoff =
-    asOfDate < periodStart
+  const paceCutoff = !employed
+    ? null
+    : asOfDate < effectiveStart
       ? null
-      : asOfDate > periodEnd
-        ? periodEnd
+      : asOfDate > effectiveEnd
+        ? effectiveEnd
         : DateTime.fromISO(asOfDate, { zone }).minus({ days: 1 }).toISODate()!;
 
   const elapsedBusinessDates =
@@ -420,6 +484,10 @@ export function computePeriodSummary(
   return {
     periodStart,
     periodEnd,
+    effectiveStart,
+    effectiveEnd,
+    employed,
+    partialEmployment,
     businessDays: businessDates.length,
     targetMinutes,
     workedMinutes,

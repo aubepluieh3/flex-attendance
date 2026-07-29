@@ -46,6 +46,8 @@ export default async function TeamMemberPage({
       name: users.name,
       employeeNo: users.employeeNo,
       teamName: teams.name,
+      hiredAt: users.hiredAt,
+      resignedAt: users.resignedAt,
     })
     .from(users)
     .leftJoin(teams, eq(users.teamId, teams.id))
@@ -106,6 +108,10 @@ export default async function TeamMemberPage({
       days,
       timeOff: off,
       asOf,
+      employment: {
+        hiredAt: target.hiredAt,
+        resignedAt: target.resignedAt,
+      },
     },
     rules.settlement,
   );
@@ -157,7 +163,28 @@ export default async function TeamMemberPage({
         <span className="dim">
           이 조회는 열람 이력에 남습니다. 근태는 개인정보입니다.
         </span>
+        {/* 부분 재직이면 아래 숫자가 어느 구간인지 적는다 */}
+        {summary.partialEmployment && (
+          <>
+            <br />
+            <span className="dim">
+              재직 {summary.effectiveStart} ~ {summary.effectiveEnd} — 소정근로와
+              주 평균이 이 구간으로 계산됩니다
+            </span>
+          </>
+        )}
       </p>
+
+      {/* 재직 기간이 아니면 0 을 그리지 않는다 — 없는 미달이 생긴다 */}
+      {!summary.employed && (
+        <section className="card">
+          <p className="empty">
+            {target.name} 님은 이 정산기간에 재직 기록이 없습니다.
+            {target.hiredAt && ` 입사 ${target.hiredAt}.`}
+            {target.resignedAt && ` 퇴사 ${target.resignedAt}.`}
+          </p>
+        </section>
+      )}
 
       <section className="card">
         <div className="tiles">

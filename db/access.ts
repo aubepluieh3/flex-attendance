@@ -1,4 +1,4 @@
-import { and, asc, eq, gte, lte } from "drizzle-orm";
+import { and, asc, eq, gte, inArray, lte } from "drizzle-orm";
 import { db } from "./client";
 import { accessLogs, holidays, orgs, teams, timeOff, users, workDays } from "./schema";
 import type { AttendanceRules, ComputedDay } from "@/lib/attendance/types";
@@ -20,6 +20,15 @@ import type { PeriodRange } from "@/lib/attendance/period";
 
 export type Role = "member" | "manager" | "hr" | "executive";
 
+/**
+ * 재직기간. 조직 정산기간과 교집합을 낸 것이 그 사람의 정산기간이다.
+ * 둘 다 null 이면 기간 전체를 재직으로 본다 (도입 전부터 있던 사용자).
+ */
+export type Employment = {
+  hiredAt: string | null;
+  resignedAt: string | null;
+};
+
 export type Viewer = {
   id: string;
   orgId: string;
@@ -27,7 +36,7 @@ export type Viewer = {
   role: Role;
   teamId: string | null;
   teamName: string | null;
-};
+} & Employment;
 
 export class AccessDenied extends Error {
   constructor(message: string) {
@@ -46,10 +55,33 @@ export async function listUsers(): Promise<(Viewer & { employeeNo: string })[]> 
       teamId: users.teamId,
       teamName: teams.name,
       employeeNo: users.employeeNo,
+      hiredAt: users.hiredAt,
+      resignedAt: users.resignedAt,
     })
     .from(users)
     .leftJoin(teams, eq(users.teamId, teams.id))
     .orderBy(asc(users.employeeNo));
+}
+
+/**
+ * 여러 사람의 재직기간을 한 번에. 팀 현황·전사 집계가 사람마다 요약을
+ * 만들면서 쓴다 — 사람 수만큼 쿼리를 내지 않으려고 배치로 받는다.
+ */
+export async function loadEmployments(
+  userIds: string[],
+): Promise<Map<string, Employment>> {
+  if (userIds.length === 0) return new Map();
+  const rows = await db
+    .select({
+      id: users.id,
+      hiredAt: users.hiredAt,
+      resignedAt: users.resignedAt,
+    })
+    .from(users)
+    .where(inArray(users.id, userIds));
+  return new Map(
+    rows.map((r) => [r.id, { hiredAt: r.hiredAt, resignedAt: r.resignedAt }]),
+  );
 }
 
 /**

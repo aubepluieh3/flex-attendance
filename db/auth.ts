@@ -198,6 +198,8 @@ export async function resolveSession(
       role: users.role,
       teamId: users.teamId,
       teamName: teams.name,
+      hiredAt: users.hiredAt,
+      resignedAt: users.resignedAt,
       active: users.active,
       sessionId: sessions.id,
       expiresAt: sessions.expiresAt,

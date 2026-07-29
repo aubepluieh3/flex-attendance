@@ -85,6 +85,16 @@ async function summaryFor(
       openSince: r.openSince,
   }));
 
+  /*
+   * 재직기간. 스냅샷은 사람별이므로(userId 단위) 조직 마감 구간과 어긋나지
+   * 않는다 — 7/20 입사자의 7월 스냅샷에는 7/20~7/31 값이 얼린다.
+   * 안 넘기면 마감된 값이 소정근로·법정초과에서 틀린 채로 동결된다.
+   */
+  const [person] = await executor
+    .select({ hiredAt: users.hiredAt, resignedAt: users.resignedAt })
+    .from(users)
+    .where(eq(users.id, userId));
+
   return computePeriodSummary(
     {
       periodStart: range.start,
@@ -92,6 +102,10 @@ async function summaryFor(
       days,
       timeOff: offRows,
       asOf,
+      employment: {
+        hiredAt: person?.hiredAt ?? null,
+        resignedAt: person?.resignedAt ?? null,
+      },
     },
     rules.settlement,
   );

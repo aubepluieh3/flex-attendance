@@ -19,6 +19,8 @@ const rows = await db
     role: users.role,
     teamId: users.teamId,
     teamName: teams.name,
+    hiredAt: users.hiredAt,
+    resignedAt: users.resignedAt,
   })
   .from(users)
   .leftJoin(teams, eq(users.teamId, teams.id));

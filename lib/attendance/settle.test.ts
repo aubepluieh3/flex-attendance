@@ -713,3 +713,128 @@ describe("한도 초과를 기간이 끝나기 전에 알린다", () => {
     expect(s.willExceedAvgWeeklyLimit).toBe(false);
   });
 });
+
+// ─────────────────────────────────────────────────────────────
+/*
+ * 그 사람의 정산기간 = 조직 정산기간 ∩ 재직기간.
+ *
+ * 중도 입사자에게 기간 전체를 요구하면 소정근로가 틀리는 데서 끝나지 않는다.
+ * 52시간 평균의 **분모**가 재직하지 않은 기간까지 포함해서 부풀고, 그러면
+ * 법정 한도 판정이 무력해진다 — 실측으로 7/20 입사자가 하루 12시간씩 일해도
+ * 주평균 27시간으로 나왔다. 분모가 목표보다 중요하다.
+ */
+describe("재직기간 교집합 — 중도 입사·퇴사", () => {
+  it("입사일 이후 영업일만 소정근로로 센다", () => {
+    const s = computePeriodSummary(
+      { ...week({}), employment: { hiredAt: "2026-03-05", resignedAt: null } },
+      base,
+    );
+    // 3/05(목) 3/06(금) 두 날만 재직
+    expect(s.effectiveStart).toBe("2026-03-05");
+    expect(s.effectiveEnd).toBe("2026-03-08");
+    expect(s.businessDays).toBe(2);
+    expect(s.targetMinutes).toBe(16 * 60);
+    expect(s.partialEmployment).toBe(true);
+  });
+
+  it("입사 전 기록은 집계에 넣지 않는다", () => {
+    const s = computePeriodSummary(
+      {
+        ...week({ days: [d("2026-03-02", 8 * 60), d("2026-03-05", 8 * 60)] }),
+        employment: { hiredAt: "2026-03-05", resignedAt: null },
+      },
+      base,
+    );
+    expect(s.workedMinutes).toBe(8 * 60);
+  });
+
+  it("52시간 분모가 재직 구간이라 법정초과가 드러난다", () => {
+    const days = [d("2026-03-05", 12 * 60), d("2026-03-06", 12 * 60)];
+
+    // 기간 전체를 분모로 쓰면 (1주) 24시간이라 초과가 안 보인다
+    const whole = computePeriodSummary(week({ days }), base);
+    expect(whole.overtimeMinutes).toBe(0);
+
+    // 재직 4일(0.571주)을 분모로 쓰면 법정 총량이 22시간대로 줄어든다
+    const partial = computePeriodSummary(
+      { ...week({ days }), employment: { hiredAt: "2026-03-05", resignedAt: null } },
+      base,
+    );
+    expect(partial.overtimeMinutes).toBeGreaterThan(0);
+    expect(partial.avgWeeklyMinutes).toBeGreaterThan(whole.avgWeeklyMinutes);
+  });
+
+  it("퇴사자는 52시간 판정이 뒤집힌다", () => {
+    const days = [
+      d("2026-03-02", 12 * 60),
+      d("2026-03-03", 12 * 60),
+      d("2026-03-04", 12 * 60),
+    ];
+    const whole = computePeriodSummary(week({ days }), base);
+    expect(whole.exceedsAvgWeeklyLimit).toBe(false); // 36시간으로 보인다
+
+    // 3/04 퇴사 → 3일(0.429주)이 분모. 주평균 84시간
+    const resigned = computePeriodSummary(
+      { ...week({ days }), employment: { hiredAt: null, resignedAt: "2026-03-04" } },
+      base,
+    );
+    expect(resigned.effectiveEnd).toBe("2026-03-04");
+    expect(resigned.exceedsAvgWeeklyLimit).toBe(true);
+  });
+
+  it("교집합이 비면 employed=false — 0이 아니라 '재직 아님'이다", () => {
+    const s = computePeriodSummary(
+      {
+        ...week({ days: weekdays(8 * 60) }),
+        employment: { hiredAt: "2026-03-20", resignedAt: null },
+      },
+      base,
+    );
+    expect(s.employed).toBe(false);
+    expect(s.businessDays).toBe(0);
+    expect(s.targetMinutes).toBe(0);
+    // 기간 안에 기록이 있어도 재직 구간 밖이면 집계하지 않는다
+    expect(s.workedMinutes).toBe(0);
+    expect(s.remainingMinutes).toBe(0);
+  });
+
+  it("재직이 기간을 덮으면 지금과 똑같다", () => {
+    const days = weekdays(8 * 60);
+    const plain = computePeriodSummary(week({ days }), base);
+    const covered = computePeriodSummary(
+      {
+        ...week({ days }),
+        employment: { hiredAt: "2026-03-01", resignedAt: "2026-03-31" },
+      },
+      base,
+    );
+    expect(covered.partialEmployment).toBe(false);
+    expect(covered.targetMinutes).toBe(plain.targetMinutes);
+    expect(covered.avgWeeklyMinutes).toBe(plain.avgWeeklyMinutes);
+  });
+
+  it("입사 전 날짜를 경과 영업일로 세지 않는다", () => {
+    // 3/06 아침 기준. 입사가 없으면 3/02~3/05 4일이 경과다
+    const plain = computePeriodSummary(week({ asOf: "2026-03-06T09:00" }), base);
+    expect(plain.elapsedBusinessDays).toBe(4);
+
+    const hired = computePeriodSummary(
+      {
+        ...week({ asOf: "2026-03-06T09:00" }),
+        employment: { hiredAt: "2026-03-05", resignedAt: null },
+      },
+      base,
+    );
+    expect(hired.elapsedBusinessDays).toBe(1);
+    expect(hired.elapsedTargetMinutes).toBe(8 * 60);
+  });
+
+  it("fixed 방식은 소정근로일 수로 비례한다 (역일 아님)", () => {
+    const s = computePeriodSummary(
+      { ...week({}), employment: { hiredAt: "2026-03-05", resignedAt: null } },
+      withRules({ targetCalcMethod: "fixed", fixedTargetMinutes: 40 * 60 }),
+    );
+    // 영업일 2/5 → 40시간의 2/5 = 16시간. 역일(4/7)이면 22시간대가 된다
+    expect(s.targetMinutes).toBe(16 * 60);
+  });
+});

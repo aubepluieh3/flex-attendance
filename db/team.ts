@@ -117,6 +117,8 @@ export async function loadTeamRows(
         name: users.name,
         employeeNo: users.employeeNo,
         teamName: teams.name,
+        hiredAt: users.hiredAt,
+        resignedAt: users.resignedAt,
       })
       .from(users)
       .leftJoin(teams, eq(users.teamId, teams.id))
@@ -208,6 +210,15 @@ export async function loadTeamRows(
         days,
         timeOff: offByUser.get(person.id) ?? [],
         asOf,
+        /*
+         * 재직기간을 넘긴다. 안 넘기면 중도 입사자가 진행률 0% 짜리 빈 막대로
+         * 나와서 200명 목록에서 이상값처럼 보인다 — 신입인 건 팀장이 이미 아는
+         * 사실이고 근태 화면이 알려줄 정보가 아니다.
+         */
+        employment: {
+          hiredAt: person.hiredAt,
+          resignedAt: person.resignedAt,
+        },
       },
       rules.settlement,
     );

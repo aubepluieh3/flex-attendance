@@ -6,6 +6,7 @@ import {
   addTeam,
   resetPassword,
   setActive,
+  setEmployment,
   setRole,
   setTeam,
 } from "@/db/people";
@@ -86,6 +87,23 @@ export async function peopleAction(
           message: active
             ? "활성화했습니다."
             : "비활성화했습니다. 로그인 세션도 끊었습니다.",
+        };
+        break;
+      }
+      case "employment": {
+        const { recordsOutside } = await setEmployment(viewer, userId, {
+          hiredAt: str(form, "hiredAt") || null,
+          resignedAt: str(form, "resignedAt") || null,
+        });
+        /*
+         * 재직기간 밖 기록이 있으면 저장하면서 바로 말한다. 상시 알림을 늘리는
+         * 대신 입력 시점에 잡는다 — 이 오류는 여기서 만들어진다.
+         */
+        result = {
+          message:
+            recordsOutside > 0
+              ? `재직기간을 저장했습니다. 다만 이 구간 밖에 근태 기록이 ${recordsOutside}건 있습니다 — 집계에서 빠집니다. 입사일이 맞는지 확인해 주세요.`
+              : "재직기간을 저장했습니다. 소정근로와 주 평균이 이 구간으로 다시 계산됩니다.",
         };
         break;
       }

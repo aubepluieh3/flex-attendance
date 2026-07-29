@@ -1,7 +1,7 @@
 import { randomInt } from "node:crypto";
-import { and, asc, eq, ne, sql } from "drizzle-orm";
+import { and, asc, eq, gt, lt, ne, or, sql } from "drizzle-orm";
 import { db } from "./client";
-import { sessions, teams, users } from "./schema";
+import { sessions, teams, users, workDays } from "./schema";
 import { AccessDenied, type Role, type Viewer } from "./access";
 import { hashPassword, verifyPassword } from "@/lib/password";
 
@@ -37,6 +37,9 @@ export type PersonRow = {
   active: boolean;
   hasPassword: boolean;
   sessionCount: number;
+  /** 재직기간 — 그 사람의 정산기간을 정한다 */
+  hiredAt: string | null;
+  resignedAt: string | null;
 };
 
 export async function listPeople(viewer: Viewer): Promise<PersonRow[]> {
@@ -51,6 +54,8 @@ export async function listPeople(viewer: Viewer): Promise<PersonRow[]> {
       teamId: users.teamId,
       teamName: teams.name,
       active: users.active,
+      hiredAt: users.hiredAt,
+      resignedAt: users.resignedAt,
       passwordHash: users.passwordHash,
       sessionCount: sql<number>`(select count(*)::int from sessions s where s.user_id = ${users.id})`,
     })
@@ -185,6 +190,53 @@ async function assertNotLastHr(viewer: Viewer, userId: string) {
       "마지막 HR 계정입니다. 다른 사람을 HR 로 지정한 뒤에 바꿔 주세요.",
     );
   }
+}
+
+/**
+ * 재직기간. 이 값이 그 사람의 정산기간을 정한다 —
+ * 조직 정산기간과 교집합을 낸 구간으로 소정근로·52시간 분모가 계산된다.
+ *
+ * 비워두면 기간 전체를 재직으로 본다. 도입 전부터 있던 사람은 비워도 되지만,
+ * 중도 입사자를 비워두면 그 달 소정근로를 전부 요구받고 52시간 판정이 느슨해진다.
+ */
+export async function setEmployment(
+  viewer: Viewer,
+  userId: string,
+  input: { hiredAt: string | null; resignedAt: string | null },
+): Promise<{ recordsOutside: number }> {
+  assertHr(viewer);
+
+  const { hiredAt, resignedAt } = input;
+  if (hiredAt && resignedAt && resignedAt < hiredAt) {
+    throw new Error("퇴사일이 입사일보다 앞설 수 없습니다.");
+  }
+
+  await db
+    .update(users)
+    .set({ hiredAt, resignedAt })
+    .where(and(eq(users.id, userId), eq(users.orgId, viewer.orgId)));
+
+  /*
+   * 재직기간 밖에 기록이 있으면 그 자리에서 알려준다.
+   *
+   * 오류가 만들어지는 순간이 곧 입력하는 순간이다. 상시 알림 항목을 늘리는
+   * 대신 여기서 말한다 — 고칠 수 있는 사람에게, 고칠 수 있는 때에.
+   * 집계는 이미 교집합으로 잘리므로 숫자가 틀리지는 않는다.
+   */
+  const outside = await db
+    .select({ n: sql<number>`count(*)::int` })
+    .from(workDays)
+    .where(
+      and(
+        eq(workDays.userId, userId),
+        gt(workDays.tagCount, 0),
+        or(
+          hiredAt ? lt(workDays.workDate, hiredAt) : undefined,
+          resignedAt ? gt(workDays.workDate, resignedAt) : undefined,
+        ),
+      ),
+    );
+  return { recordsOutside: outside[0]?.n ?? 0 };
 }
 
 export async function setRole(

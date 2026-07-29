@@ -260,6 +260,22 @@ export const users = pgTable(
     teamId: uuid("team_id").references(() => teams.id),
     role: userRole("role").notNull().default("member"),
     active: boolean("active").notNull().default(true),
+    /**
+     * 근로관계 **시작일**. "정규직 전환일"이 아니다 — 인턴·계약직으로 일한
+     * 기간이 있으면 그 시작일을 넣는다. 인턴도 근로자이므로 전환일을 넣으면
+     * 그 기간 근무가 집계에서 빠진다.
+     *
+     * 이 날 이전은 그 사람의 정산기간이 아니다 (소정근로·52시간 분모에서 빠진다).
+     * null 이면 기간 전체를 재직으로 본다 — 도입 전부터 있던 사용자.
+     */
+    hiredAt: date("hired_at", { mode: "string" }),
+    /**
+     * 근로관계 종료일 (**포함**). 이 날까지 일한 것으로 본다.
+     *
+     * active=false 와 다르다 — 비활성화는 로그인 차단이고 이건 정산 구간이다.
+     * §36 금품청산이 14일 기한이라 퇴사 시점까지로 정산할 수 있어야 한다.
+     */
+    resignedAt: date("resigned_at", { mode: "string" }),
     createdAt: timestamp("created_at", { withTimezone: true })
       .notNull()
       .defaultNow(),

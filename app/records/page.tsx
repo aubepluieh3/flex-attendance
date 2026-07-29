@@ -87,8 +87,32 @@ export default async function RecordsPage({
    * 단 앞으로 잡힌 휴가는 보여준다. 안 보이면 "내가 연차 냈던가?"를
    * 확인할 방법이 없다.
    */
-  const dates = allDates.filter((d) => d <= today || offAll.has(d));
-  const upcoming = allDates.filter((d) => d > today && !offAll.has(d));
+  /*
+   * 재직기간 밖은 아예 카드를 만들지 않는다.
+   *
+   * 이 화면은 기록 없는 날마다 보정 폼을 펼치므로, 재직기간을 안 자르면
+   * 7/20 입사자에게 7/1~7/19 보정 폼이 열린다 — 입사 전 근무를 신고할 수
+   * 있게 된다. 목록에서 빼면 폼도 같이 없어진다.
+   *
+   * 기록이 있는 날은 예외다. 원본을 화면에서 지우면 입사일이 틀렸다는 걸
+   * 아무도 모른다. 다만 이때도 보정은 막는다 (employedDate 로 아래에서 가른다).
+   */
+  const employedDate = (d: string) =>
+    (viewer.hiredAt === null || d >= viewer.hiredAt) &&
+    (viewer.resignedAt === null || d <= viewer.resignedAt);
+  const hasRecord = new Set(
+    days.filter((d) => d.tagCount > 0).map((d) => d.workDate),
+  );
+  const inScope = (d: string) => employedDate(d) || hasRecord.has(d);
+
+  const dates = allDates.filter(
+    (d) => inScope(d) && (d <= today || offAll.has(d)),
+  );
+  const upcoming = allDates.filter(
+    (d) => inScope(d) && d > today && !offAll.has(d),
+  );
+  // 재직기간 밖 = 근무 신고 대상이 아니다. 마감과 같은 이유로 폼을 잠근다.
+  const lockedDate = (d: string) => closed || !employedDate(d);
 
   const time = (d: Date | null) =>
     d ? DateTime.fromJSDate(d, { zone }).toFormat("HH:mm") : "";
@@ -275,7 +299,7 @@ export default async function RecordsPage({
               하루 전체를 덮어쓰는 보정과 달리 그 세션만 닫으므로, 같은 날의 다른
               세션과 사원증 기록은 그대로 남는다.
             */}
-            {!closed &&
+            {!lockedDate(date) &&
               toClose.map((s) => (
                 <form action={recordsAction} className="adjust" key={s.id}>
                   <input type="hidden" name="op" value="closeSession" />
@@ -339,7 +363,18 @@ export default async function RecordsPage({
               있으니 먼저 펼치지 않는다 — 시작하지도 않은 날에 보정 폼이
               열려 있으면 "여기에 시간을 적으라"는 말로 읽힌다.
             */}
-            {!closed && date <= today && !(fullDayOff && !day) && (
+            {/*
+              재직기간 밖인데 기록이 있는 날. 기록은 보여주지만 보정은 막는다 —
+              입사 전 근무를 신고할 수 있게 하면 개념이 화면에서 깨진다.
+            */}
+            {!employedDate(date) && (
+              <p className="empty">
+                재직 기간 밖입니다. 집계에 들어가지 않고 보정할 수도 없습니다 —
+                입사일이 잘못 등록되었다면 HR에 알려주세요.
+              </p>
+            )}
+
+            {!lockedDate(date) && date <= today && !(fullDayOff && !day) && (
               <details className="adjust-box" open={needsFix && date < today}>
                 <summary>
                   {needsFix && date < today ? "이 날 보정하기" : "시각 정정"}

@@ -48,6 +48,8 @@ async function summariesFor(
       employeeNo: users.employeeNo,
       name: users.name,
       teamName: teams.name,
+      hiredAt: users.hiredAt,
+      resignedAt: users.resignedAt,
     })
     .from(users)
     .leftJoin(teams, eq(users.teamId, teams.id))
@@ -124,6 +126,12 @@ async function summariesFor(
         days: daysByUser.get(person.id) ?? [],
         timeOff: offByUser.get(person.id) ?? [],
         asOf,
+        // 전사 집계는 급여 시스템에 넘기는 원자료다. 재직기간을 안 넘기면
+        // 중도 입사자의 연장근로가 0으로 나가서 가산수당이 빠진다.
+        employment: {
+          hiredAt: person.hiredAt,
+          resignedAt: person.resignedAt,
+        },
       },
       rules.settlement,
     ),

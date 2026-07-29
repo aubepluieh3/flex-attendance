@@ -150,6 +150,7 @@ export function PeopleManager({
                 <th>이름</th>
                 <th>팀</th>
                 <th>역할</th>
+                <th>재직기간</th>
                 <th>상태</th>
                 <th>세션</th>
                 <th />
@@ -191,6 +192,31 @@ export function PeopleManager({
                           </option>
                         ))}
                       </select>
+                    </form>
+                  </td>
+                  {/*
+                    재직기간. 이 값이 그 사람의 정산기간을 정한다 — 조직 기간과
+                    교집합을 낸 구간으로 소정근로와 52시간 분모가 계산된다.
+                    비워두면 기간 전체를 재직으로 본다.
+                  */}
+                  <td>
+                    <form action={action} className="inline">
+                      <input type="hidden" name="op" value="employment" />
+                      <input type="hidden" name="userId" value={p.id} />
+                      <input
+                        type="date"
+                        name="hiredAt"
+                        defaultValue={p.hiredAt ?? ""}
+                        aria-label={`${p.name} 입사일`}
+                      />
+                      <span className="dim"> ~ </span>
+                      <input
+                        type="date"
+                        name="resignedAt"
+                        defaultValue={p.resignedAt ?? ""}
+                        aria-label={`${p.name} 퇴사일`}
+                      />
+                      <button type="submit">저장</button>
                     </form>
                   </td>
                   <td>

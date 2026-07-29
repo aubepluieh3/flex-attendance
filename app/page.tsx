@@ -72,11 +72,37 @@ export default async function Page({
       days,
       timeOff: off,
       asOf,
+      // 그 사람의 정산기간 = 조직 정산기간 ∩ 재직기간
+      employment: { hiredAt: viewer.hiredAt, resignedAt: viewer.resignedAt },
     },
     rules.settlement,
   );
 
-  const dates = eachDate(range.start, range.end, zone);
+  /*
+   * 날짜 목록은 그 사람의 정산기간(= 조직 기간 ∩ 재직기간)이다.
+   *
+   * 입사 전 빈 날짜를 보여주면 "입사 전인데 안 일했다"로 읽히고, 주차 줄까지
+   * 만들어져서 없는 미달이 생긴다. 그래서 빼는데 — 기록이 **있는** 날은 뺄 수
+   * 없다. 원본을 화면에서 지우면 입사일이 틀렸다는 사실을 아무도 모른다.
+   * (집계에는 안 들어간다. settle.ts 가 교집합으로 잘라낸다.)
+   */
+  const outsideWithRecord = days
+    .filter(
+      (d) =>
+        d.tagCount > 0 &&
+        (d.workDate < summary.effectiveStart ||
+          d.workDate > summary.effectiveEnd),
+    )
+    .map((d) => d.workDate);
+  const dates = [
+    ...new Set([
+      ...(summary.employed
+        ? eachDate(summary.effectiveStart, summary.effectiveEnd, zone)
+        : []),
+      ...outsideWithRecord,
+    ]),
+  ].sort();
+  const outsideDates = new Set(outsideWithRecord);
   const byDate = new Map<string, ComputedDay>(days.map((d) => [d.workDate, d]));
   const offByDate = new Map(off.map((o) => [o.date, o]));
 
@@ -238,6 +264,10 @@ export default async function Page({
         <span className="off">{date > asOfDate ? "—" : "기록 없음"}</span>
       );
 
+    // 재직 구간 밖인데 기록이 있는 날. 집계에서 빠졌다는 걸 그 줄에서 말한다 —
+    // 안 적으면 숫자가 안 맞는 이유를 화면 어디서도 알 수 없다.
+    const outside = outsideDates.has(date);
+
     return (
       <li key={date} className={weekend ? "we" : undefined}>
         <div className="d">
@@ -274,7 +304,10 @@ export default async function Page({
             />
           )}
         </div>
-        <div className="v">{value}</div>
+        <div className="v">
+          {value}
+          {outside && <span className="warn">재직 기간 밖 · 집계 제외</span>}
+        </div>
       </li>
     );
   };
@@ -375,6 +408,22 @@ export default async function Page({
           {rules.settlementKind === "week" ? "주" : "월"} 단위 정산 ·{" "}
           {importedThrough}
         </span>
+        {/*
+          부분 재직이면 재직 구간을 병기한다. 같은 "7월"이 사람마다 다른 구간을
+          뜻하게 되므로 이걸 안 적으면 아래 숫자를 남과 맞춰볼 수 없다.
+        */}
+        {summary.partialEmployment && (
+          <>
+            <br />
+            <span className="dim">
+              재직 {label(summary.effectiveStart, zone).md}
+              {summary.effectiveEnd === range.end
+                ? "~"
+                : `~${label(summary.effectiveEnd, zone).md}`}{" "}
+              — 소정근로와 주 평균이 이 구간으로 계산됩니다
+            </span>
+          </>
+        )}
       </p>
 
       {(msg || err) && (
@@ -393,6 +442,28 @@ export default async function Page({
         </section>
       )}
 
+      {/*
+        재직 기간이 아니면 여기서 끝낸다.
+        0 을 그리면 "안 일했다"로 읽혀서 없는 미달이 생긴다 — 입사도 안 한 달에
+        "176시간 미달" 판정을 받는 화면이 실제로 나왔다. 교집합이 비었다는 건
+        숫자가 0이라는 뜻이 아니라 그 정산기간이 그 사람에게 없다는 뜻이다.
+      */}
+      {!summary.employed ? (
+        <section className="card hero">
+          <div className="label">
+            {label(range.start, zone).md} ~ {label(range.end, zone).md}
+          </div>
+          <div className="figure">재직 기간이 아닙니다</div>
+          <div className="note">
+            {viewer.hiredAt && range.end < viewer.hiredAt
+              ? `${label(viewer.hiredAt, zone).md} 입사 — 그 전 정산기간에는 근태가 없습니다.`
+              : viewer.resignedAt && range.start > viewer.resignedAt
+                ? `${label(viewer.resignedAt, zone).md} 까지 재직 — 그 뒤 정산기간에는 근태가 없습니다.`
+                : "이 정산기간에는 재직 기록이 없습니다."}
+          </div>
+        </section>
+      ) : (
+        <>
       {/* 오늘 카드는 이번 기간을 볼 때만. 지난 기간에 근무 시작 버튼은 뜻이 없다 */}
       {isCurrent && <TodayCard view={todayView} />}
 
@@ -815,6 +886,8 @@ export default async function Page({
           표를 옆으로 밀면 체류 · 휴게 · 실근무 · 비고가 있습니다.
         </p>
       </details>
+        </>
+      )}
     </main>
   );
 }

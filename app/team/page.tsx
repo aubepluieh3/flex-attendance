@@ -83,6 +83,10 @@ export default async function TeamPage({
   const pct = (n: number, of: number) =>
     of > 0 ? Math.min(100, Math.round((n / of) * 100)) : 0;
 
+  /** "2026-07-20" → "7/20". 재직 구간을 좁은 칸에 병기할 때 쓴다 */
+  const md = (iso: string) =>
+    iso.slice(5).replace("-", "/").replace(/^0/, "");
+
   /**
    * 재실 표시는 이번 기간을 볼 때만. 지난주 화면에 "근무 중"이 뜨면
    * 그게 지금인지 그때인지 알 수 없다.
@@ -357,18 +361,31 @@ export default async function TeamPage({
                       )}
                     </div>
                     <div className="nums">
-                      <span>
-                        {hm(s.workedMinutes)} / {hm(s.targetMinutes)}
-                      </span>
-                      <span
-                        className={s.exceedsAvgWeeklyLimit ? "over" : "none"}
-                      >
-                        {s.exceedsAvgWeeklyLimit
-                          ? `주 평균 ${hm(s.avgWeeklyMinutes)} · 한도 초과`
-                          : s.remainingMinutes === 0
-                            ? "달성"
-                            : `남음 ${hm(s.remainingMinutes)}`}
-                      </span>
+                      {/*
+                        재직 기간이 아니면 0/0 을 쓰지 않는다. "달성"으로도
+                        "미달"로도 읽히면 안 되는 상태다 — 그 사람에게 이
+                        정산기간이 없다는 뜻이다.
+                      */}
+                      {!s.employed ? (
+                        <span className="none">재직 기간 아님</span>
+                      ) : (
+                        <>
+                          <span>
+                            {hm(s.workedMinutes)} / {hm(s.targetMinutes)}
+                            {s.partialEmployment &&
+                              ` · 재직 ${md(s.effectiveStart)}~${md(s.effectiveEnd)}`}
+                          </span>
+                          <span
+                            className={s.exceedsAvgWeeklyLimit ? "over" : "none"}
+                          >
+                            {s.exceedsAvgWeeklyLimit
+                              ? `주 평균 ${hm(s.avgWeeklyMinutes)} · 한도 초과`
+                              : s.remainingMinutes === 0
+                                ? "달성"
+                                : `남음 ${hm(s.remainingMinutes)}`}
+                          </span>
+                        </>
+                      )}
                     </div>
                   </li>
                 );
