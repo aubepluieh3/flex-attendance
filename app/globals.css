@@ -1529,14 +1529,15 @@ a.pill.button-link:hover {
      * 이름 칸을 250px 로 둔다. 210px 에서는 "근무 중 · 10:23~" + 확인 배지가
      * 줄바꿈되어 그 사람만 29px → 57px 로 두 배가 됐다.
      */
-    grid-template-columns: 250px minmax(0, 380px) 1fr;
+    /*
+     * 막대를 380 → 340px 로 줄였다. 숫자 칸이 208px 밖에 안 남아서 내용(실적·
+     * 목표 132px + 상태 96px)이 안 들어가 줄마다 제멋대로 접혔다. 눈금은
+     * 340px 에서도 읽힌다.
+     */
+    grid-template-columns: 250px minmax(0, 340px) 1fr;
     grid-template-areas: "who prog nums";
     align-items: center;
     gap: 8px 20px;
-  }
-  .roster .nums {
-    justify-content: flex-start;
-    gap: 16px;
   }
 }
 .roster .who {
@@ -1675,16 +1676,52 @@ a.pill.button-link:hover {
   background: var(--ink-3);
   transform: translateX(-1px);
 }
+/*
+ * 숫자·상태의 자리를 칸으로 고정한다.
+ *
+ * 전에는 span 두 개를 space-between 으로 밀어놨다. 그러면 상태 표기("달성",
+ * "남음 87시간 3분")의 **시작 x 가 앞 숫자 길이에 따라 60px 씩 흩어진다** —
+ * 오른쪽 끝만 맞고 눈으로 훑을 열이 안 생긴다. 게다가 부가 문구(휴가 차감·
+ * 재직 구간)가 숫자 뒤에 이어붙어 칸을 넘쳐서, 줄 높이가 19px 과 39px 로
+ * 섞였다.
+ *
+ * 부가 문구는 아래 줄로 내리고, 상태는 고정폭 칸에 왼쪽 정렬한다. 좁은 화면은
+ * 한 줄에 둘 폭이 없어서 위아래로 쌓는다 — 쌓아도 시작 x 는 같다.
+ */
 .roster .nums {
-  display: flex;
-  justify-content: space-between;
-  gap: 12px;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 2px;
   font-size: 12.5px;
   color: var(--ink-2);
   font-variant-numeric: tabular-nums;
 }
+.roster .nums .state,
 .roster .nums .none {
   color: var(--ink-3);
+}
+/* 목표가 남과 다른 이유·한도 초과의 근거. 판정이 아니라 부연이다 */
+.roster .nums .meta {
+  color: var(--ink-3);
+  font-size: 12px;
+}
+/*
+ * 넓은 화면에서는 실적과 상태를 한 줄에 둔다. 상태 칸을 고정폭으로 잡아야
+ * 줄마다 같은 x 에서 시작해서 위아래로 훑는 열이 된다.
+ *
+ * 이 블록은 위 @media 가 아니라 여기 있어야 한다 — 기본 규칙보다 뒤에 와야
+ * grid-template-columns 가 안 덮인다. (실제로 덮여서 한 줄이 안 됐다)
+ */
+@media (min-width: 861px) {
+  .roster .nums {
+    /* 96px — "남음 187시간 30분"이 한 줄에 들어가는 폭 */
+    grid-template-columns: minmax(0, 1fr) 96px;
+    gap: 2px 12px;
+    align-items: baseline;
+  }
+  .roster .nums .meta {
+    grid-column: 1 / -1;
+  }
 }
 
 .adjust {

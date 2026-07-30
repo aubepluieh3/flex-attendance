@@ -321,6 +321,21 @@ export default async function TeamPage({
                 const done = pct(s.workedMinutes, s.targetMinutes);
                 const elapsed = s.businessDays - s.remainingBusinessDays;
                 const expected = pct(elapsed, s.businessDays);
+                /*
+                  판정 옆에 붙이지 않고 모아서 아래 줄로 내린다 — 목표가 남과
+                  다른 이유(휴가·부분 재직)와 한도 초과의 근거는 부연이다.
+                */
+                const meta = [
+                  s.exceedsAvgWeeklyLimit
+                    ? `주 평균 ${hm(s.avgWeeklyMinutes)}`
+                    : null,
+                  s.approvedLeaveMinutes > 0
+                    ? `휴가 ${hm(s.approvedLeaveMinutes)} 차감`
+                    : null,
+                  s.partialEmployment
+                    ? `재직 ${md(s.applicableStart)}~${md(s.applicableEnd)}`
+                    : null,
+                ].filter((v): v is string => v !== null);
                 return (
                   <li key={r.userId}>
                     <div className="who">
@@ -374,23 +389,35 @@ export default async function TeamPage({
                         <span className="none">재직 기간 아님</span>
                       ) : (
                         <>
-                          <span>
+                          {/*
+                            실적을 오른쪽 정렬해 "/"와 목표를 맞춰봤는데, 그러면
+                            실적이 짧은 사람("0분")의 글자 시작점이 안쪽으로
+                            밀려서 아래 부연 줄과 어긋나 보였다. 목표는 어차피
+                            대부분 같은 값이라 맞춰 얻는 게 적다 — 왼쪽 정렬로
+                            세 줄의 시작점을 하나로 둔다.
+                          */}
+                          <span className="amount">
                             {hm(s.workedMinutes)} / {hm(s.targetMinutes)}
-                            {/* 목표가 남과 다른 이유를 같이 적는다 */}
-                            {s.approvedLeaveMinutes > 0 &&
-                              ` · 휴가 ${hm(s.approvedLeaveMinutes)} 차감`}
-                            {s.partialEmployment &&
-                              ` · 재직 ${md(s.applicableStart)}~${md(s.applicableEnd)}`}
                           </span>
+                          {/*
+                            상태는 짧게 — 이 칸은 줄마다 같은 자리에 서서
+                            위아래로 훑는 열이다. 길어지면 열이 무너진다.
+                            근거 숫자(주 평균)는 아래 부연으로 내린다.
+                          */}
                           <span
-                            className={s.exceedsAvgWeeklyLimit ? "over" : "none"}
+                            className={
+                              s.exceedsAvgWeeklyLimit ? "state over" : "state"
+                            }
                           >
                             {s.exceedsAvgWeeklyLimit
-                              ? `주 평균 ${hm(s.avgWeeklyMinutes)} · 한도 초과`
+                              ? "한도 초과"
                               : s.remainingMinutes === 0
                                 ? "달성"
                                 : `남음 ${hm(s.remainingMinutes)}`}
                           </span>
+                          {meta.length > 0 && (
+                            <span className="meta">{meta.join(" · ")}</span>
+                          )}
                         </>
                       )}
                     </div>
