@@ -551,17 +551,21 @@ export default async function Page({
                 목표 달성
               </div>
             )}
+            {/*
+              법정초과는 여기 두지 않는다. 「숫자로 보기」로 내렸다.
+
+              히어로는 "오늘 뭘 해야 하나"를 답하는 자리다. 법정초과는 이미
+              발생한 사실이고 본인이 할 행동이 없다 — 그에 대한 의무는 회사에
+              있다(§56 가산수당). 첫 화면에 상시로 두면 "내가 법을 어긴 건가"로
+              읽히고, 7월처럼 소정근로가 법정 총량보다 큰 달에는 목표만 채워도
+              발생하므로 거의 모든 사람에게 늘 붙는다.
+
+              접근을 없앤 게 아니라 선반을 옮긴 것이다 — 급여를 대조하려는
+              사람은 「숫자로 보기」에서 본다.
+            */}
             <div className="note">
               누적 {hm(summary.workedMinutes)} / 목표{" "}
               {hm(summary.targetMinutes)}
-              {/*
-                법정초과는 willExceed 와 무관하게 보여준다. 소정근로가 법정
-                총량보다 큰 달(7월은 목표 184시간 vs 법정 총량 177시간 9분)에는
-                목표만 정확히 채워도 연장근로가 생긴다. 그 사실이 화면에
-                없으면 본인은 모르고 급여 쪽에서만 안다.
-              */}
-              {summary.overtimeMinutes > 0 &&
-                ` · 법정초과 ${hm(summary.overtimeMinutes)}`}
             </div>
           </>
         ) : (
@@ -905,6 +909,20 @@ export default async function Page({
       {/* 정확한 숫자는 접어 둔다. 색에만 의존하지 않기 위해 표를 없애지 않는다 */}
       <details className="fold" style={{ marginBottom: 14 }}>
         <summary>숫자로 보기</summary>
+        {/*
+          급여 대조용 숫자. 히어로에서 내렸다 — 오늘의 행동이 아니라 확인용이다.
+          법정근로 총량을 같이 적는다. 초과분만 보여주면 무엇을 넘긴 건지
+          알 수 없고, "내가 법을 어겼다"로 읽힌다. 넘긴 시간에 대한 의무는
+          회사에 있다(§56 가산수당).
+        */}
+        <p className="empty" style={{ margin: "0 0 10px" }}>
+          법정근로 총량 {hm(summary.applicableStatutoryMinutes)} · 법정초과{" "}
+          {hm(summary.overtimeMinutes)}
+          {summary.overtimeMinutes > 0 &&
+            " — 초과분은 연장근로이며 가산수당 대상입니다(§56)"}
+          {summary.partialEmployment &&
+            ` · 재직 ${label(summary.applicableStart, zone).md}~${label(summary.applicableEnd, zone).md} 기준`}
+        </p>
         <div className="scroll-x">
           <table>
             <thead>

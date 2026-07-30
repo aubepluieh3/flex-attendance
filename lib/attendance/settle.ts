@@ -504,21 +504,16 @@ export function computePeriodSummary(
    * 승인된 휴가가 있으면 그날 몫을 뺀다. 안 빼면 월말에 휴가를 낸 사람이
    * 경고를 맞는다 — 정직한 신고에 불이익을 붙이는 쪽이 된다.
    *
-   * 엄밀한 하한은 아니다. remainingBusinessDates 가 paceCutoff(어제) 초과라
-   * 오늘을 포함하는데, 오늘 실적은 workedMinutes 에 이미 들어 있다. 그래서
-   * 영업일에는 오늘 몫(최대 standardMinutesPerDay)만큼 높게 잡히고, 다음
-   * 날 그 날이 빠지면서 내려간다 — 금요일에 켜졌다가 주말에 꺼지고 월요일에
-   * 다시 켜지는 모양이 된다.
+   * ⚠ **이미 일한 시간을 남은 몫에서 뺀다.** remainingBusinessDates 는
+   * paceCutoff(어제) 초과라 오늘을 포함하는데, 오늘 실적은 workedMinutes 에
+   * 이미 들어 있다. 안 빼면 같은 하루를 두 번 세고, 그러면 판정이 거꾸로 간다 —
+   * 실제로 이런 일이 있었다:
    *
-   * 그래도 그대로 둔다. 7월(영업일 23일·한도 총량 230시간 17분)로 재보면
-   * 9.5시간/일은 한 번도 안 켜지고, 10.5시간 이상은 실제 위법이라 2~3일 더
-   * 일찍 켜지는 쪽이 이롭다. 경계에 걸리는 10시간/일은 기간 총량 230시간 —
-   * 한도까지 17분이라 경고받는 게 맞다. 오차가 안전한 방향이고, 이 값은
-   * 본인 화면에만 나온다 (app/ui.guard.test.ts 가 관리자 화면 사용을 막는다).
+   *   7/29  누적 209시간 7분  + 남은소정 24시간 = 233시간 7분   🟠 켜짐
+   *   7/30  누적 212시간 37분 + 남은소정 16시간 = 228시간 37분  ⚪ 꺼짐
    *
-   * 정리해야 할 때는 여기가 아니라 화면이다. 이 값을 히어로 최상단으로
-   * 올리면 저 깜빡임이 화면에서 가장 큰 요소가 되므로, 그때는 오늘 몫을
-   * max(오늘 실적, 오늘 소정근로) 로 바꿔서 겹침을 없애야 한다.
+   * 3시간 30분을 **더 일했는데** 경고가 꺼졌다. 오늘이 남은 몫에서 빠지는
+   * 속도가 일이 쌓이는 속도보다 빨라서다. 주말마다 깜빡이는 것도 같은 원인이다.
    */
   const remainingBusinessDates =
     paceCutoff === null
@@ -529,13 +524,17 @@ export function computePeriodSummary(
   for (const t of periodTimeOff) {
     deductByDate.set(t.date, (deductByDate.get(t.date) ?? 0) + t.deductMinutes);
   }
+  /** 날짜별 확정 실근무. 남은 몫에서 이미 일한 만큼을 빼는 데 쓴다 */
+  const workedByDate = new Map(counted.map((d) => [d.workDate, d.workMinutes]));
 
   const remainingScheduledMinutes = remainingBusinessDates.reduce(
     (sum, date) =>
       sum +
       Math.max(
         0,
-        rules.standardMinutesPerDay - (deductByDate.get(date) ?? 0),
+        rules.standardMinutesPerDay -
+          (deductByDate.get(date) ?? 0) -
+          (workedByDate.get(date) ?? 0),
       ),
     0,
   );

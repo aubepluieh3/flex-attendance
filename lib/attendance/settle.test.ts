@@ -914,3 +914,73 @@ describe("계약 소정근로 · 승인 휴가 · 채워야 할 근무", () => {
     expect(s.scheduledTargetMinutes).toBe(16 * 60);
   });
 });
+
+// ─────────────────────────────────────────────────────────────
+/*
+ * 사전 경고는 "더 일하면" 켜지는 방향으로만 움직여야 한다.
+ *
+ * 남은 몫에서 이미 일한 시간을 빼지 않으면 같은 하루를 두 번 세고, 그러면
+ * 판정이 거꾸로 간다. 실제로 이런 일이 있었다 —
+ *
+ *   7/29  누적 209시간 7분  + 남은소정 24시간 = 233시간 7분   경고 켜짐
+ *   7/30  누적 212시간 37분 + 남은소정 16시간 = 228시간 37분  경고 꺼짐
+ *
+ * 3시간 30분을 더 일했는데 경고가 꺼졌다. 문장으로 적어두면 다음 사람이 또
+ * 겹치므로 검사로 둔다.
+ */
+describe("사전 경고 — 더 일했는데 꺼지지 않는다", () => {
+  it("남은 몫에서 오늘 이미 일한 시간을 뺀다", () => {
+    // 3/16(월) 09시 기준. 오늘 아직 0분
+    const empty = computePeriodSummary(
+      month({ asOf: "2026-03-16T09:00", days: businessDaysFrom(10, 8 * 60) }),
+      base,
+    );
+    // 같은 날 8시간을 채운 상태
+    const worked = computePeriodSummary(
+      month({ asOf: "2026-03-16T18:00", days: businessDaysFrom(11, 8 * 60) }),
+      base,
+    );
+    // 오늘 몫 8시간이 남은 몫에서 빠져야 한다
+    expect(worked.remainingScheduledMinutes).toBe(
+      empty.remainingScheduledMinutes - 8 * 60,
+    );
+  });
+
+  it("같은 날 더 일해도 경고가 켜짐→꺼짐으로 뒤집히지 않는다", () => {
+    // 경계에 걸리는 페이스로 하루씩 늘려가며 판정을 본다
+    let everOn = false;
+    for (let days = 1; days <= 22; days++) {
+      const s = computePeriodSummary(
+        month({
+          asOf: "2026-03-31T23:59",
+          days: businessDaysFrom(days, 11 * 60),
+        }),
+        base,
+      );
+      if (s.exceedsLimitEvenIfScheduledOnly) everOn = true;
+      // 한 번 켜진 뒤에는 일을 더 해서 꺼지는 일이 없어야 한다
+      if (everOn) expect(s.exceedsLimitEvenIfScheduledOnly).toBe(true);
+    }
+    expect(everOn).toBe(true);
+  });
+
+  it("소정근로를 채운 날이 지나가도 합계가 줄지 않는다", () => {
+    /*
+     * 날이 바뀌면 그 날이 남은 몫에서 빠진다. 소정근로를 채웠다면 그 날의
+     * 남은 몫은 이미 0이므로 빠져도 합계가 그대로여야 한다 — 이게 안 되면
+     * 날짜가 넘어가는 것만으로 판정이 완화된다.
+     */
+    const sum = (s: ReturnType<typeof computePeriodSummary>) =>
+      s.workedMinutes + s.remainingScheduledMinutes;
+
+    const mon = computePeriodSummary(
+      month({ asOf: "2026-03-16T23:00", days: businessDaysFrom(11, 8 * 60) }),
+      base,
+    );
+    const tue = computePeriodSummary(
+      month({ asOf: "2026-03-17T09:00", days: businessDaysFrom(11, 8 * 60) }),
+      base,
+    );
+    expect(sum(tue)).toBe(sum(mon));
+  });
+});
