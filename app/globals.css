@@ -77,6 +77,15 @@
    */
   --control-h: 40px;
 
+  /*
+   * 짧은 폼 칸(날짜·시각·종류 같은 것)의 폭.
+   *
+   * 컨트롤 중 가장 넓은 게 input[type="date"] 다 (Chrome 에서 "2026-07-30" +
+   * 달력 아이콘에 142px). 이보다 좁게 잡으면 컨트롤이 칸 밖으로 나가서 옆 칸과의
+   * 간격을 먹는다. 여유를 조금 둔다.
+   */
+  --field-w: 150px;
+
   /* 큰 섀도우를 쓰지 않는다. 선으로 구분하고 그림자는 아주 약하게 */
   --shadow: 0 1px 2px rgba(16, 16, 20, 0.04);
   --shadow-md: 0 4px 16px rgba(16, 16, 20, 0.06);
@@ -1684,11 +1693,27 @@ a.pill.button-link:hover {
   align-items: flex-end;
   gap: 10px;
 }
+/*
+ * 짧은 칸 폭은 124px 이 아니라 --field-w 다.
+ *
+ * 124px 일 때 input[type="date"] 안에 "2026-07-30" + 달력 아이콘이 안 들어가서
+ * 컨트롤이 칸 밖으로 142px 까지 삐져나왔다. 칸 자리는 10px 간격으로 잡혀
+ * 있는데 그 안의 컨트롤이 18px 넘쳐서, **날짜와 종류 사이만 간격이 0** 이 되고
+ * 종류와 사유 사이는 10px 이었다 — 같은 줄에서 칸 간격이 달라 보인 원인이다.
+ *
+ * 칸마다 다르게 주지 않고 짧은 칸 전부를 한 폭으로 맞춘다. 폭이 같아야 간격이
+ * 같아 보인다. 안에 뭐가 들어가든 넘치지 않을 만큼(달력 아이콘 + 8자리) 잡는다.
+ */
 .adjust .field {
-  flex: 0 0 124px;
+  flex: 0 0 var(--field-w);
 }
 .adjust .field.grow {
   flex: 1 1 220px;
+}
+/* 컨트롤은 칸을 넘지 않는다 — 넘치면 옆 칸과의 간격이 먹힌다 */
+.adjust .field > input,
+.adjust .field > select {
+  max-width: 100%;
 }
 .adjust + .adjust {
   margin-top: 12px;
