@@ -540,6 +540,12 @@ export default async function RecordsPage({
       {/*
         손댈 것이 있는 주와 이번 주만 펼친다. 나머지는 한 줄로 접는다 —
         정상인 날 카드가 화면을 다 먹으면 고쳐야 할 날을 찾을 수 없다.
+
+        단 확인할 게 그 주 날짜의 절반을 넘으면 접는다. 기록이 하나도 없는
+        사람(도입 첫 달의 전 직원)은 모든 영업일이 확인 대상이라 다섯 주가 전부
+        펼쳐졌다 — 접기가 필요한 사람에게 접기가 작동하지 않았고 모바일에서
+        13화면이었다. 판정을 바꾸는 게 아니라 표시 임계를 둔다.
+        요약 줄의 "확인 N" 배지는 그대로 보인다.
       */}
       {weeks.length === 0 ? (
         <p className="empty">이 정산기간에 표시할 날이 없습니다.</p>
@@ -548,7 +554,10 @@ export default async function RecordsPage({
           <details
             className="weekgroup"
             key={g.key}
-            open={g.hasToday || g.attention > 0}
+            open={
+              g.hasToday ||
+              (g.attention > 0 && g.attention <= Math.ceil(g.dates.length / 2))
+            }
           >
             <summary>
               <span className="ord">{g.ord}</span>

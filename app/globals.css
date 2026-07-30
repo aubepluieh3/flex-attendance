@@ -46,9 +46,36 @@
   --grid: #ececE8;
   --axis: #d6d6d1;
 
+  --radius-sm: 8px;
   --radius: 10px;
   --radius-lg: 14px;
   --radius-pill: 999px;
+
+  /*
+   * 타이포 4단 · 굵기 3단.
+   *
+   * 전에는 크기 조합이 28종이었다 — 12·12.5·13·13.5·14·14.5px 가 0.5px 간격으로
+   * 여섯 종. 그 정도 차이는 의도로 읽히지 않고 정돈되지 않은 것으로 보인다.
+   * 굵기도 400~900 사이 아홉 종이었는데 550/600, 650/680 은 화면에서 구분되지
+   * 않는다. 색·radius·shadow 에는 토큰이 있었고 타이포에만 없었다.
+   */
+  --fs-1: 22px; /* 화면 제목 */
+  --fs-2: 15.5px; /* 카드 제목 */
+  --fs-3: 13px; /* 본문 */
+  --fs-4: 12px; /* 보조·표 헤더 */
+  --fw-normal: 400;
+  --fw-mid: 600;
+  --fw-bold: 700;
+
+  /*
+   * 폼 컨트롤 높이.
+   *
+   * text 41 · date/time 43 · select 38 · file 25 로 네 종류였다. 한 줄에
+   * 사번(select) · 날짜(date) · 종류(select) · 사유(text) 가 있으면 아래선이
+   * 세 번 어긋난다. 5px 차이는 "틀렸다"고 인식되진 않지만 화면이 정돈되지
+   * 않은 느낌의 주된 원인이었다.
+   */
+  --control-h: 40px;
 
   /* 큰 섀도우를 쓰지 않는다. 선으로 구분하고 그림자는 아주 약하게 */
   --shadow: 0 1px 2px rgba(16, 16, 20, 0.04);
@@ -167,7 +194,7 @@ code {
   font-size: 0.92em;
   background: var(--surface-2);
   border: 1px solid var(--line);
-  border-radius: 5px;
+  border-radius: var(--radius-sm);
   padding: 1px 5px;
 }
 
@@ -253,7 +280,7 @@ code {
 .brand .mark {
   width: 22px;
   height: 22px;
-  border-radius: 7px;
+  border-radius: var(--radius-sm);
   background: var(--accent);
   color: #fff;
   display: grid;
@@ -298,7 +325,7 @@ code {
   justify-content: space-between;
   gap: 8px;
   padding: 8px 10px;
-  border-radius: 8px;
+  border-radius: var(--radius-sm);
   font-size: 13.5px;
   font-weight: 550;
   color: var(--ink-2);
@@ -346,7 +373,7 @@ code {
   color: var(--ink-2);
   text-decoration: none;
   padding: 6px 10px;
-  border-radius: 8px;
+  border-radius: var(--radius-sm);
 }
 .whoami:hover {
   background: var(--surface-2);
@@ -472,21 +499,41 @@ code {
   background: var(--surface);
   border: 1px solid var(--line);
   border-radius: var(--radius-lg);
+  /* 히어로만 크게 한다 (.hero 에서 덮는다). 그 외에는 한 값으로 — 22px 과
+     24px 이 섞여 있어서 카드가 쌓이면 왼쪽 텍스트 시작선이 흔들렸다 */
   padding: 20px 22px;
   margin-bottom: 14px;
   box-shadow: var(--shadow);
 }
+/*
+ * 카드 제목. 전에는 12.5px 로 **본문(13px)보다 작았다** — 굵기로만 구분해서
+ * 카드가 6개인 화면(근태 설정)에서 제목이 본문에 묻혔다. h1(22) → h2(12.5) →
+ * 본문(13) 으로 2단계와 3단계가 뒤집혀 있었다.
+ */
 .card > h2 {
-  font-size: 12.5px;
-  font-weight: 650;
-  letter-spacing: 0.01em;
-  color: var(--ink-3);
+  font-size: var(--fs-2);
+  font-weight: var(--fw-mid);
+  letter-spacing: -0.01em;
+  color: var(--ink);
   margin: 0 0 14px;
 }
 
+/*
+ * 아직 열리지 않은 단계. 자리는 남기고 눌러도 아무 일이 없다는 걸 색으로 말한다.
+ * (근태 파일 반영의 2·3 단계)
+ */
+.card.locked {
+  background: var(--surface-2);
+  box-shadow: none;
+}
+.card.locked > h2 {
+  color: var(--ink-3);
+}
+
 /* ── 히어로 ── */
+/* 의도된 예외 — 첫 화면의 큰 숫자가 들어가는 카드만 여유를 준다 */
 .hero {
-  padding: 26px 24px;
+  padding: 26px 22px;
 }
 .hero .label {
   font-size: 13px;
@@ -645,7 +692,7 @@ code {
   flex: none;
   width: 20px;
   height: 20px;
-  border-radius: 6px;
+  border-radius: var(--radius-sm);
   display: grid;
   place-items: center;
   font-size: 12px;
@@ -710,7 +757,7 @@ code {
 table {
   width: 100%;
   border-collapse: collapse;
-  font-size: 13px;
+  font-size: var(--fs-3);
 }
 th,
 td {
@@ -719,10 +766,15 @@ td {
   border-bottom: 1px solid var(--line);
   white-space: nowrap;
 }
+/*
+ * 표 헤더. 11.5px 는 본문보다 1.5px 작아서 열 이름을 확인하려면 눈을 좁혀야
+ * 했고, 한 화면에 11.5 / 12 / 12.5 / 13 이 다 나왔다. 12px 로 올리고 자간으로
+ * 구분한다.
+ */
 th {
-  font-weight: 600;
+  font-weight: var(--fw-mid);
   color: var(--ink-3);
-  font-size: 11.5px;
+  font-size: var(--fs-4);
   letter-spacing: 0.02em;
   border-bottom: 1px solid var(--line-strong);
 }
@@ -890,12 +942,17 @@ input:not([type="checkbox"]):not([type="radio"]):not([type="file"]),
 select,
 textarea {
   width: 100%;
+  /*
+   * 높이를 토큰으로 고정한다. padding 만 맞춰도 date/time 은 브라우저가 넣는
+   * 아이콘 때문에, select 는 line-height 때문에 각각 다른 높이가 된다.
+   */
+  min-height: var(--control-h);
   color: var(--ink);
   background: var(--surface);
   border: 1px solid var(--line-strong);
   border-radius: var(--radius);
-  padding: 9px 11px;
-  font-size: 13.5px;
+  padding: 8px 11px;
+  font-size: var(--fs-3);
   transition:
     border-color 0.12s,
     box-shadow 0.12s;
@@ -915,10 +972,55 @@ textarea:focus {
 input::placeholder {
   color: var(--ink-3);
 }
+/*
+ * file 입력만 브라우저 기본이었다 — 높이 25px, radius 0, "선택된 파일 없음"
+ * 이라는 네이티브 문구까지 나왔다. 다른 입력과 같은 테두리·높이를 준다.
+ * 내부 버튼(::file-selector-button)은 부수 동작 크기로 맞춘다.
+ */
 input[type="file"] {
-  font-size: 13px;
+  width: 100%;
+  min-height: var(--control-h);
+  display: flex;
+  align-items: center;
+  gap: 10px;
   color: var(--ink-2);
-  max-width: 100%;
+  background: var(--surface);
+  border: 1px solid var(--line-strong);
+  border-radius: var(--radius);
+  padding: 6px 10px;
+  font-size: var(--fs-4);
+}
+input[type="file"]::file-selector-button {
+  font: inherit;
+  font-size: var(--fs-4);
+  font-weight: var(--fw-mid);
+  color: var(--ink);
+  background: var(--surface-2);
+  border: 1px solid var(--line-strong);
+  border-radius: var(--radius-sm);
+  padding: 5px 10px;
+  margin: 0;
+  cursor: pointer;
+}
+input[type="file"]::file-selector-button:hover {
+  border-color: var(--ink-3);
+}
+
+/*
+ * details 마커를 한 곳에서 정한다.
+ *
+ * 근태 설정의 "처음 설정 순서" 앞에 세로 막대 글리프가 남아 있었다 —
+ * 커스텀 마커를 쓰면서 기본 마커를 완전히 지우지 않은 곳이 있었다.
+ * 같은 컴포넌트가 화면마다 다르게 보이는 건 규칙이 여러 곳에 있어서다.
+ */
+details > summary {
+  list-style: none;
+}
+details > summary::-webkit-details-marker {
+  display: none;
+}
+details > summary::marker {
+  content: "";
 }
 
 .fields {
@@ -929,8 +1031,8 @@ input[type="file"] {
 .field {
   display: grid;
   gap: 6px;
-  font-size: 12px;
-  font-weight: 550;
+  font-size: var(--fs-4);
+  font-weight: var(--fw-mid);
   color: var(--ink-3);
   min-width: 0;
 }
@@ -963,7 +1065,15 @@ button,
   background: var(--accent);
   border: 1px solid transparent;
   border-radius: var(--radius);
-  padding: 9px 16px;
+  /*
+   * 주 동작 높이. 전에는 모든 버튼이 41px 한 종류였다 — "근무 시작"(그 화면의
+   * 목적)과 표 행의 "삭제"가 같은 무게라 시선이 어디로 가야 할지 정해지지
+   * 않았고, 표 행에 41px 버튼이 들어가서 행 높이가 필요 이상으로 늘어났다.
+   * 부수 동작은 .pill 을 쓴다 (아래).
+   */
+  min-height: var(--control-h);
+  padding: 8px 16px;
+  font-weight: var(--fw-mid);
   cursor: pointer;
   text-decoration: none;
   white-space: nowrap;
@@ -1008,7 +1118,16 @@ button.danger {
   border-radius: var(--radius);
   background: var(--surface);
 }
+/*
+ * 부수 동작. 표 행이나 목록 안의 버튼은 주 동작과 같은 무게면 안 된다 —
+ * 전에는 모든 버튼이 41px 한 종류라 "근무 시작"과 표 행의 "삭제"가 같았고,
+ * 41px 버튼 때문에 표 행 높이가 필요 이상으로 늘어났다.
+ */
 button.pill {
+  min-height: 30px;
+  padding: 4px 11px;
+  font-size: var(--fs-4);
+
   border: 1px solid var(--line-strong);
   color: var(--ink-2);
 }
@@ -1045,7 +1164,7 @@ button.danger:hover {
   align-items: center;
   gap: 8px;
   padding: 10px 12px;
-  border-radius: 8px;
+  border-radius: var(--radius-sm);
   background: var(--surface-2);
   font-size: 13px;
   color: var(--ink-2);
@@ -1157,15 +1276,29 @@ button.danger:hover {
   gap: 6px;
   cursor: pointer;
   list-style: none;
-  font-size: 13.5px;
-  font-weight: 620;
-  padding: 9px 14px;
+  /* 버튼과 같은 높이·폰트로 맞춘다 — 나란히 놓이는데 크기가 달랐다 */
+  min-height: var(--control-h);
+  font-size: var(--fs-3);
+  font-weight: var(--fw-mid);
+  padding: 8px 14px;
   border-radius: var(--radius);
   background: var(--surface);
   border: 1px solid var(--crit);
   color: var(--crit-ink);
   white-space: nowrap;
 }
+/*
+ * 되돌릴 수 있는 무거운 작업. 게이트는 두지만 빨강은 쓰지 않는다 —
+ * 진짜 위험한 것과 같은 색이면 위험도가 구분되지 않는다.
+ */
+.confirm.mild > summary {
+  border-color: var(--line-strong);
+  color: var(--ink);
+}
+.confirm.mild > summary:hover {
+  background: var(--surface-2);
+}
+
 .confirm > summary::-webkit-details-marker {
   display: none;
 }
@@ -1247,7 +1380,7 @@ a.pill.button-link:hover {
   gap: 10px;
   font-size: 13px;
   padding: 6px 10px;
-  border-radius: 8px;
+  border-radius: var(--radius-sm);
   background: var(--surface-2);
 }
 .sessions .span {
@@ -1298,6 +1431,13 @@ a.pill.button-link:hover {
   content: "▸";
   font-size: 11px;
   transition: transform 0.12s;
+  /*
+   * 밑줄을 끊는다. summary 의 underline 을 물려받은 채로 아래에서 90° 회전하면
+   * 가로 밑줄이 **세로 막대**가 되어 "| ▾ 처음 설정 순서" 처럼 보였다.
+   * 열려 있을 때만 나타나서 찾기 어려웠다.
+   */
+  text-decoration: none;
+  display: inline-block;
 }
 .adjust-box[open] > summary::before,
 .fold[open] > summary::before {
@@ -1451,7 +1591,7 @@ a.pill.button-link:hover {
   align-items: center;
   gap: 12px;
   padding: 7px 8px;
-  border-radius: 8px;
+  border-radius: var(--radius-sm);
 }
 .daybars > li:hover {
   background: var(--surface-2);
@@ -1562,7 +1702,7 @@ form.inline select {
   min-width: 92px;
   font-size: 12.5px;
   padding: 4px 8px;
-  border-radius: 7px;
+  border-radius: var(--radius-sm);
   border-color: var(--line);
 }
 .row-actions {
@@ -1608,7 +1748,7 @@ form.inline select {
 .auth-brand .mark {
   width: 26px;
   height: 26px;
-  border-radius: 8px;
+  border-radius: var(--radius-sm);
   background: var(--accent);
   color: #fff;
   display: grid;

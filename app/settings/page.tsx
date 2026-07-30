@@ -259,35 +259,6 @@ export default async function SettingsPage({
                 defaultValue={hours(rules.settlement.maxAvgWeeklyMinutes)}
               />
             </label>
-            {/*
-              소정근로와 법정 총량은 기준이 다르다 —
-                소정근로  = 영업일 × 1일 소정근로
-                법정 총량 = 역일 ÷ 7 × 40시간 (§50)
-              그래서 영업일이 많은 달에는 소정근로를 정확히 채우기만 해도
-              연장근로가 발생한다. 앱은 소정근로를 깎지 않는다(§2①7호로 당사자가
-              정하는 값이다). 대신 이 성질을 상시 보여준다.
-            */}
-            {overStatutory.length > 0 && (
-              <p className="empty" style={{ gridColumn: "1 / -1", margin: 0 }}>
-                <b>
-                  현재 산정 방식에서는 월별 영업일 수에 따라 소정근로시간이
-                  법정근로 총량을 초과할 수 있습니다.
-                </b>
-                <br />
-                앞으로 1년 중 {overStatutory.length}개 기간이 여기 걸립니다 —{" "}
-                {overStatutory
-                  .slice(0, 4)
-                  .map(
-                    (m) =>
-                      `${m.label}: 소정근로 ${hm(m.targetMinutes)} / 법정근로 총량 약 ${hm(m.statutoryMinutes)} (+${hm(m.overMinutes)})`,
-                  )
-                  .join(" · ")}
-                {overStatutory.length > 4 && ` 외 ${overStatutory.length - 4}개`}
-                <br />
-                초과분은 연장근로이며 가산수당 대상입니다(§56). 앱은 소정근로를
-                법정 총량으로 자동 보정하지 않습니다.
-              </p>
-            )}
             <label className="field">
               <span>날짜 귀속 기준시각</span>
               <input
@@ -386,6 +357,39 @@ export default async function SettingsPage({
             </label>
           </div>
           {/*
+            소정근로와 법정 총량은 기준이 다르다 —
+              소정근로  = 영업일 × 1일 소정근로
+              법정 총량 = 역일 ÷ 7 × 40시간 (§50)
+            그래서 영업일이 많은 달에는 소정근로를 정확히 채우기만 해도
+            연장근로가 발생한다. 앱은 소정근로를 깎지 않는다(§2①7호로 당사자가
+            정하는 값이다). 대신 이 성질을 상시 보여준다.
+
+            필드 그리드 **뒤**에 둔다. 전에는 필드 사이에 끼워 넣어서 4열
+            그리드가 두 번 끊겼고, 한 카드가 세 덩어리로 보였다.
+          */}
+          {overStatutory.length > 0 && (
+            <p className="empty" style={{ margin: "14px 0 0" }}>
+              <b>
+                현재 산정 방식에서는 월별 영업일 수에 따라 소정근로시간이
+                법정근로 총량을 초과할 수 있습니다.
+              </b>
+              <br />
+              앞으로 1년 중 {overStatutory.length}개 기간이 여기 걸립니다 —{" "}
+              {overStatutory
+                .slice(0, 4)
+                .map(
+                  (m) =>
+                    `${m.label}: 소정근로 ${hm(m.targetMinutes)} / 법정근로 총량 약 ${hm(m.statutoryMinutes)} (+${hm(m.overMinutes)})`,
+                )
+                .join(" · ")}
+              {overStatutory.length > 4 && ` 외 ${overStatutory.length - 4}개`}
+              <br />
+              초과분은 연장근로이며 가산수당 대상입니다(§56). 앱은 소정근로를
+              법정 총량으로 자동 보정하지 않습니다.
+            </p>
+          )}
+
+          {/*
             규칙을 바꾸면 전 직원의 과거 집계가 다시 계산된다.
             한 번의 클릭으로 실행되면 안 된다 — 처음 쓰는 사용자로 걸어보니
             아무 생각 없이 눌러서 전원 재계산이 즉시 돌았다.
@@ -404,17 +408,21 @@ export default async function SettingsPage({
             </div>
           </details>
         </form>
-        <details className="confirm" style={{ marginTop: 10 }}>
+        {/*
+          재계산만 하는 건 되돌릴 수 없는 동작이 아니다 — 원본 태그에서 다시
+          세는 것이라 두 번 돌려도 결과가 같다. 위쪽 "저장하고 재계산"과 같은
+          빨간 표현을 쓰면 위험도가 구분되지 않는다. 무거운 작업이라 게이트는
+          두고, 색만 중립으로 둔다.
+        */}
+        <details className="confirm mild" style={{ marginTop: 10 }}>
           <summary>규칙은 그대로, 재계산만…</summary>
           <div className="box">
             <span className="why">
               설정을 바꾸지 않고 원본 태그에서 다시 계산합니다. 늦게 들어온
-              기록을 반영할 때 씁니다.
+              기록을 반영할 때 씁니다. 두 번 돌려도 결과는 같습니다.
             </span>
             <form action={recomputeAction} className="inline">
-              <button type="submit" className="danger">
-                네, 재계산합니다
-              </button>
+              <button type="submit">네, 재계산합니다</button>
             </form>
           </div>
         </details>

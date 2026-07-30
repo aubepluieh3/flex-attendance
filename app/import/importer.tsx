@@ -98,6 +98,24 @@ export function Importer({ timezone }: { timezone: string }) {
         )}
       </section>
 
+      {/*
+        파일을 고르기 전에는 2·3 카드가 없어서 제목이 "1. 파일 선택" 다음 바로
+        "4. 반영" 으로 건너뛰었다. 번호가 빠진 건 대개 버그로 읽히고, 전체가
+        몇 단계인지도 알 수 없다. 잠긴 자리로 남긴다.
+      */}
+      {!table &&
+        [
+          ["2. 컬럼 매핑", "어느 열이 사번·일시인지 지정합니다."],
+          ["3. 미리보기", "반영 전에 몇 건이 들어가는지 확인합니다."],
+        ].map(([title, why]) => (
+          <section className="card locked" key={title}>
+            <h2>{title}</h2>
+            <p className="empty">
+              {why} CSV 파일을 선택하면 열립니다.
+            </p>
+          </section>
+        ))}
+
       {table && (
         <section className="card">
           <h2>2. 컬럼 매핑</h2>
