@@ -1337,9 +1337,35 @@ a.pill.button-link:hover {
   flex-direction: column;
   gap: 16px;
 }
+/*
+ * 좁은 화면에서 두 줄로 둔다.
+ *
+ * 전에는 who / prog / nums 가 각각 한 줄이라 한 사람이 69px 였다. 200명이면
+ * 16화면이다. 막대와 숫자를 같은 줄에 두면 45px 대로 내려간다.
+ * (넓은 화면은 아래 @media 에서 한 줄로 만든다 — 29px)
+ */
 .roster > li {
   display: grid;
-  gap: 6px;
+  /*
+   * 막대에 고정폭을 준다. auto 로 두면 숫자 칸이 길어질 때(휴가 차감·재직 구간
+   * 문구가 붙는 사람) 막대가 1px 로 짜부라진다 — 실제로 그랬다.
+   * 부가 문구가 있는 사람만 숫자가 두 줄이 되고, 대부분은 두 줄로 끝난다.
+   */
+  grid-template-columns: 72px minmax(0, 1fr);
+  grid-template-areas:
+    "who  who"
+    "prog nums";
+  align-items: center;
+  gap: 5px 10px;
+}
+.roster .who {
+  grid-area: who;
+}
+.roster .prog {
+  grid-area: prog;
+}
+.roster .nums {
+  grid-area: nums;
 }
 /*
  * 넓은 화면에서는 세 칸으로 나눈다.
@@ -1350,7 +1376,12 @@ a.pill.button-link:hover {
  */
 @media (min-width: 861px) {
   .roster > li {
-    grid-template-columns: 210px minmax(0, 400px) 1fr;
+    /*
+     * 이름 칸을 250px 로 둔다. 210px 에서는 "근무 중 · 10:23~" + 확인 배지가
+     * 줄바꿈되어 그 사람만 29px → 57px 로 두 배가 됐다.
+     */
+    grid-template-columns: 250px minmax(0, 380px) 1fr;
+    grid-template-areas: "who prog nums";
     align-items: center;
     gap: 8px 20px;
   }

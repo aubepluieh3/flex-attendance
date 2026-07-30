@@ -325,6 +325,10 @@ export default async function TeamPage({
                   <li key={r.userId}>
                     <div className="who">
                       <Link href={`/team/${r.userId}`}>{r.name}</Link>
+                      {/*
+                        팀 이름은 없앤 표에만 있던 값이다. HR 만 필요하다 —
+                        팀장은 자기 팀(과 하위 팀)만 보므로 대체로 다 같다.
+                      */}
                       {presenceCell(r.presence, false)}
                       {r.review.total > 0 && (
                         <span
@@ -400,62 +404,6 @@ export default async function TeamPage({
             </p>
           </section>
 
-          <details className="fold" style={{ marginBottom: 14 }}>
-            <summary>숫자로 보기</summary>
-          <div className="scroll-x">
-            <table>
-              <thead>
-                <tr>
-                  <th>이름</th>
-                  <th>상태</th>
-                  {/*
-                    좁은 화면에서는 팀·소정근로를 접는다. 팀은 대체로 다 같고
-                    소정근로는 사람마다 같은 값이라 판단에 안 쓰인다.
-                    "확인 필요"가 화면 밖으로 밀리는 게 훨씬 나쁘다.
-                  */}
-                  <th className="hide-sm">팀</th>
-                  <th>실근무</th>
-                  <th className="hide-sm">소정근로</th>
-                  <th>남음</th>
-                  <th>확인 필요</th>
-                </tr>
-              </thead>
-              <tbody>
-                {rows.map((r) => (
-                  <tr key={r.userId}>
-                    <td>
-                      <Link href={`/team/${r.userId}`}>{r.name}</Link>
-                    </td>
-                    <td>{presenceCell(r.presence)}</td>
-                    <td className="none hide-sm">{r.teamName ?? "—"}</td>
-                    <td>{hm(r.summary.workedMinutes)}</td>
-                    <td className="none hide-sm">
-                      {hm(r.summary.targetMinutes)}
-                    </td>
-                    <td>
-                      {r.summary.remainingMinutes === 0
-                        ? "달성"
-                        : hm(r.summary.remainingMinutes)}
-                    </td>
-                    <td>
-                      {r.review.total === 0 ? (
-                        <span className="none">—</span>
-                      ) : (
-                        <span
-                          className={
-                            r.review.exceedsLegalLimit ? "badge crit" : "badge"
-                          }
-                        >
-                          {r.review.total}
-                        </span>
-                      )}
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-          </details>
         </>
       )}
 
