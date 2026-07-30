@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { byName } from "@/lib/collate";
 import { DateTime } from "luxon";
 import { loadOrgRules } from "@/db/access";
 import { loadTeamRows } from "@/db/team";
@@ -75,7 +76,7 @@ export default async function TeamPage({
    * rows 는 "확인할 게 많은 사람"순으로 와 있는데, 그건 위쪽 '확인 필요'가
    * 이미 하는 일이다. 목록은 특정 사람을 찾는 데 쓰이므로 이름순이 낫다.
    */
-  const roster = [...rows].sort((a, b) => a.name.localeCompare(b.name));
+  const roster = [...rows].sort(byName((r) => r.name));
   const pending = await listPendingFor(viewer);
 
   const clock = (d: Date) =>

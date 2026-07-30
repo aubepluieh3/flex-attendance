@@ -1,4 +1,5 @@
 import { and, asc, eq, gte, inArray, lte } from "drizzle-orm";
+import { byName } from "@/lib/collate";
 import { DateTime } from "luxon";
 import { db } from "./client";
 import { accessLogs, teams, timeOff, users, workDays } from "./schema";
@@ -224,9 +225,7 @@ export async function loadTeamAggregates(
     periodEnd: range.end,
   });
 
-  return [...byTeam.values()].sort((a, b) =>
-    a.teamName.localeCompare(b.teamName),
-  );
+  return [...byTeam.values()].sort(byName((t) => t.teamName));
 }
 
 /**

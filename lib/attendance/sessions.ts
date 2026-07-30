@@ -1,4 +1,5 @@
 import { DateTime, Interval } from "luxon";
+import { byIsoDate } from "../collate";
 import { autoBreakMinutesFor, resolveWorkDate } from "./compute";
 import type {
   AttendanceRules,
@@ -297,7 +298,7 @@ export function computeWorkDaysFromSessions(
     });
   }
 
-  return days.sort((a, b) => a.workDate.localeCompare(b.workDate));
+  return days.sort(byIsoDate((d) => d.workDate));
 }
 
 /**

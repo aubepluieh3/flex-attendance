@@ -1,4 +1,5 @@
 import { eq, inArray } from "drizzle-orm";
+import { byName } from "@/lib/collate";
 import { db } from "./client";
 import { attendanceLogs, importBatches, users } from "./schema";
 import { AccessDenied, loadOrgRules, type Viewer } from "./access";
@@ -148,6 +149,6 @@ export async function applyImport(opts: {
       .map(([employeeNo, rows]) => ({ employeeNo, rows }))
       .sort((a, b) => b.rows - a.rows),
     errors: errors.map((e) => ({ rowIndex: e.rowIndex, reason: e.reason })),
-    recomputed: recomputed.sort((a, b) => a.name.localeCompare(b.name)),
+    recomputed: recomputed.sort(byName((r) => r.name)),
   };
 }

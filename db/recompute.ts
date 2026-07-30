@@ -1,4 +1,5 @@
 import { and, asc, desc, eq, gte, lte, sql } from "drizzle-orm";
+import { byIsoDate } from "@/lib/collate";
 import { DateTime } from "luxon";
 import { db } from "./client";
 import {
@@ -117,9 +118,7 @@ export async function recomputeWorkDays(opts: {
     byDate.set(date, applyAdjustment(byDate.get(date) ?? null, adj, rules));
   }
 
-  const result = [...byDate.values()].sort((a, b) =>
-    a.workDate.localeCompare(b.workDate),
-  );
+  const result = [...byDate.values()].sort(byIsoDate((d) => d.workDate));
 
   await db.transaction(async (tx) => {
     /**

@@ -16,6 +16,7 @@
  * 때마다 발동하는 질문이 낫다.
  */
 import { DateTime } from "luxon";
+import { byIsoDate } from "../collate";
 import type { ComputedDay, DayFlag } from "./types";
 import { CALC_VERSION } from "./calc-version";
 
@@ -553,7 +554,7 @@ export function computePeriodSummary(
   const flaggedDates = periodDays
     .filter((d) => d.flags.length > 0)
     .map((d) => ({ date: d.workDate, flags: d.flags }))
-    .sort((a, b) => a.date.localeCompare(b.date));
+    .sort(byIsoDate((d) => d.date));
 
   const workedDates = new Set(
     counted.filter((d) => d.workMinutes > 0).map((d) => d.workDate),

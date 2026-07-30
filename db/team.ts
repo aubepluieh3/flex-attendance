@@ -8,6 +8,7 @@
  * 자세한 배경은 lib/attendance/settle.ts 상단에 있다.
  */
 import { and, asc, eq, gte, inArray, lte, ne } from "drizzle-orm";
+import { compareName } from "@/lib/collate";
 import { db } from "./client";
 import { accessLogs, dayAdjustments, teams, timeOff, users, workDays } from "./schema";
 import {
@@ -292,7 +293,9 @@ export async function loadTeamRows(
   });
 
   // 팀장이 매일 볼 이유를 만든다: 확인할 게 많은 사람이 위로
-  rows.sort((a, b) => b.review.total - a.review.total || a.name.localeCompare(b.name));
+  rows.sort(
+    (a, b) => b.review.total - a.review.total || compareName(a.name, b.name),
+  );
 
   await db.insert(accessLogs).values({
     orgId: viewer.orgId,
