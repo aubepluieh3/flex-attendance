@@ -85,7 +85,13 @@ async function main() {
       /* 월 단위 — docs/concepts.md 부록과 같다. lib/seed.ts 의 opts 도 월이다 */
       settlementPeriod: "month",
       weekStartDay: 1,
-      targetMinutesPerPeriod: 40 * 60,
+      /*
+       * 고정 목표는 "기간당" 값이다. 정산기간이 월이 되었으니 40시간(주 단위
+       * 값)이면 안 된다 — 지금은 소정근로 산정이 `영업일 × 1일 소정근로` 라
+       * 쓰이지 않지만, 데모에서 `고정 목표` 로 바꿔보면 월 목표가 40시간으로
+       * 나온다. db/bootstrap.ts 와 같은 값(160시간)으로 맞춘다.
+       */
+      targetMinutesPerPeriod: 160 * 60,
       limitMinutesPerWeek: 52 * 60,
       standardMinutesPerDay: 8 * 60,
       autoBreakRules: a.autoBreakRules,

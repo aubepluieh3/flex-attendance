@@ -39,7 +39,8 @@ export const demoSettlementRules: SettlementRules = {
   holidays: [],
   targetCalcMethod: "business_days",
   standardMinutesPerDay: 8 * 60,
-  fixedTargetMinutes: 40 * 60,
+  /* 기간당 값이다. 정산기간이 월이므로 주 단위 40시간이 아니다 */
+  fixedTargetMinutes: 160 * 60,
   legalWeeklyMinutes: 40 * 60,
   maxAvgWeeklyMinutes: 52 * 60,
   paceToleranceMinutes: 60,
