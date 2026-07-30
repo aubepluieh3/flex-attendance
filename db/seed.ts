@@ -27,6 +27,7 @@ import { hashPassword } from "@/lib/password";
 import {
   DEMO_PASSWORD,
   demoAttendanceRules,
+  demoEmploymentFor,
   demoPeople,
   demoPeriods,
   demoSessionsFor,
@@ -81,7 +82,8 @@ async function main() {
     .values({
       name: "FORCS",
       timezone: a.timezone,
-      settlementPeriod: "week",
+      /* 월 단위 — docs/concepts.md 부록과 같다. lib/seed.ts 의 opts 도 월이다 */
+      settlementPeriod: "month",
       weekStartDay: 1,
       targetMinutesPerPeriod: 40 * 60,
       limitMinutesPerWeek: 52 * 60,
@@ -108,6 +110,10 @@ async function main() {
     .values({ orgId: org.id, name: "플랫폼팀", parentId: hq.id })
     .returning();
 
+  /* 입·퇴사일이 있는 사람만 값이 들어간다. 없으면 null — 조직 기간 전체가 그 사람의 기간이다 */
+  const employment = new Map(
+    demoEmploymentFor(asOf).map((e) => [e.employeeNo, e]),
+  );
   await db.insert(users).values(
     demoPeople.map((p) => ({
       orgId: org.id,
@@ -116,6 +122,8 @@ async function main() {
       teamId: p.team === "hq" ? hq.id : squad.id,
       role: p.role,
       passwordHash,
+      hiredAt: employment.get(p.employeeNo)?.hiredAt ?? null,
+      resignedAt: employment.get(p.employeeNo)?.resignedAt ?? null,
     })),
   );
 
@@ -208,7 +216,7 @@ async function main() {
   await syncNotifications(org.id, asOf);
 
   console.log(`오늘: ${today}`);
-  console.log(`정산기간: ${twoAgo.start} ~ ${current.end} (주 3개)`);
+  console.log(`정산기간: ${twoAgo.start} ~ ${current.end} (기간 3개)`);
   console.log(
     `사용자 ${demoPeople.length}명 · 태그 ${tagCount}건 · 앱 근무구간 ${sessionCount}건 · 휴가 ${offCount}건 · work_days ${dayRows}건`,
   );

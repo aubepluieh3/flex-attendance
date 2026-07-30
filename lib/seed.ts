@@ -51,11 +51,28 @@ export const demoPeople = [
   { name: "박준영", employeeNo: "F2021-117", role: "member", team: "squad" },
   { name: "정세아", employeeNo: "F2014-002", role: "hr", team: "hq" },
   { name: "최민서", employeeNo: "F2009-001", role: "executive", team: "hq" },
+  /*
+   * 아래 셋은 화면에서 한 번도 볼 수 없던 경우를 열기 위한 사람들이다.
+   * 재보니 데모에 입·퇴사일이 0명, 한글 아닌 이름이 0명, 한도 초과가 0명이라
+   * 개인 집계기간·"재직 기간 아님"·한도 초과·이름 정렬이 전부 단위 테스트에만
+   * 있었다. 테스트 통과는 확인이 아니다.
+   */
+  { name: "한지우", employeeNo: "F2026-118", role: "member", team: "squad" },
+  { name: "문가온", employeeNo: "F2015-072", role: "member", team: "squad" },
+  { name: "Sarah Chen", employeeNo: "F2020-055", role: "member", team: "squad" },
 ] as const;
 
-const opts = { kind: "week" as const, weekStartDay: 1, timezone: DEMO_ZONE };
+/*
+ * 정산기간은 **월**이다.
+ *
+ * 전에는 주였는데 docs/concepts.md 부록과 실제 운영 설정은 월이었다. 셋이
+ * 어긋나 있었고, 무엇보다 주 단위에서는 한도 초과(정산기간 평균 52시간)를
+ * 심을 수가 없다 — 한 주에 52시간을 넘기려면 1일 상한 12시간을 먼저 깨야 한다.
+ * §52 정산기간도 통상 1개월이다.
+ */
+const opts = { kind: "month" as const, weekStartDay: 1, timezone: DEMO_ZONE };
 
-/** 이번 주 / 지난주 / 2주 전 */
+/** 이번 기간 / 지난 기간 / 두 기간 전 */
 export function demoPeriods(asOf: Date = now()) {
   const today = DateTime.fromJSDate(asOf, { zone: DEMO_ZONE }).toISODate()!;
   const current = resolvePeriod(today, opts);
@@ -103,6 +120,46 @@ function appOnlyDates(asOf: Date) {
   };
 }
 
+/** 기간 가운데 날짜 — 중도 입사자를 기간 중간에 놓는다 */
+function midDate(from: string, to: string): string {
+  const a = DateTime.fromISO(from, { zone: DEMO_ZONE });
+  const b = DateTime.fromISO(to, { zone: DEMO_ZONE });
+  return a.plus({ days: Math.floor(b.diff(a, "days").days / 2) }).toISODate()!;
+}
+
+export type DemoEmployment = {
+  employeeNo: string;
+  hiredAt: string | null;
+  resignedAt: string | null;
+};
+
+/**
+ * 재직기간.
+ *
+ * 개인 집계기간 = 조직 정산기간 ∩ 재직기간. 이 개념이 화면에 나타나려면 기간
+ * 경계를 걸치는 사람이 있어야 한다. 나머지 사람은 입·퇴사일을 비워 둔다 —
+ * null 이면 조직 정산기간 전체가 그 사람의 기간이라는 뜻이고, 기존 직원을
+ * 그렇게 표현하는 게 맞다.
+ */
+export function demoEmploymentFor(asOf: Date = now()): DemoEmployment[] {
+  const { current, last } = demoPeriods(asOf);
+  const lastDays = businessDays(last.start, last.end);
+  return [
+    // 이번 기간 중간 입사 → 목표가 남과 다르고 "재직 M/D~M/D" 부연이 붙는다
+    {
+      employeeNo: "F2026-118",
+      hiredAt: midDate(current.start, current.end),
+      resignedAt: null,
+    },
+    // 지난 기간 마지막 영업일에 퇴사 → 이번 기간은 "재직 기간 아님"
+    {
+      employeeNo: "F2015-072",
+      hiredAt: null,
+      resignedAt: lastDays[lastDays.length - 1],
+    },
+  ];
+}
+
 export type DemoTags = { employeeNo: string; tags: TagInput[] };
 
 /**
@@ -122,11 +179,25 @@ export function demoTagsFor(asOf: Date = now()): DemoTags[] {
   const dayun: TagInput[] = [];
   const haram: TagInput[] = [];
   const junyoung: TagInput[] = [];
+  /** 한지우 — 이번 기간 중간 입사자 */
+  const jiwoo: TagInput[] = [];
+  /** 문가온 — 지난 기간에 퇴사 */
+  const gaon: TagInput[] = [];
+  /** Sarah Chen — 한도를 실제로 넘는 사람 */
+  const sarah: TagInput[] = [];
+
+  const hired = new Map(
+    demoEmploymentFor(asOf).map((e) => [e.employeeNo, e]),
+  );
+  const jiwooFrom = hired.get("F2026-118")!.hiredAt!;
+  const gaonTo = hired.get("F2015-072")!.resignedAt!;
 
   for (const d of twoAgoDays) {
     dayun.push(...normalDay(d, "09:12", "19:05"));
     haram.push(...normalDay(d, "08:40", "18:20"));
     junyoung.push(...normalDay(d, "10:05", "20:10"));
+    gaon.push(...normalDay(d, "09:30", "18:40"));
+    sarah.push(...normalDay(d, "08:00", "20:20"));
   }
 
   // 앱으로만 찍은 날은 사원증 태그를 넣지 않는다. 겹치면 계산은 맞지만
@@ -144,20 +215,29 @@ export function demoTagsFor(asOf: Date = now()): DemoTags[] {
       dayun.push(...normalDay(d, "09:12", "19:05"));
     }
     if (d !== appOnly.split) haram.push(...normalDay(d, "08:40", "18:20"));
-    // 박준영은 길게 일해서 주 52시간에 가까워진다
+    // 박준영은 길게 일해서 주 평균 52시간에 가까워진다 (넘지는 않는다)
     if (d !== appOnly.forgot) junyoung.push(...normalDay(d, "08:30", "22:30"));
+    // 문가온은 퇴사일까지만 근무한다
+    if (d <= gaonTo) gaon.push(...normalDay(d, "09:30", "18:40"));
+    sarah.push(...normalDay(d, "08:00", "20:20"));
   });
 
   for (const d of currentDays) {
     dayun.push(...normalDay(d, "09:20", "18:50"));
     haram.push(...normalDay(d, "08:45", "18:10"));
     junyoung.push(...normalDay(d, "09:00", "19:30"));
+    // 입사 전 날짜에는 기록이 없어야 한다 — 있으면 개념이 깨진다
+    if (d >= jiwooFrom) jiwoo.push(...normalDay(d, "09:40", "19:10"));
+    sarah.push(...normalDay(d, "08:00", "20:20"));
   }
 
   return [
     { employeeNo: "F2019-041", tags: dayun },
     { employeeNo: "F2016-008", tags: haram },
     { employeeNo: "F2021-117", tags: junyoung },
+    { employeeNo: "F2026-118", tags: jiwoo },
+    { employeeNo: "F2015-072", tags: gaon },
+    { employeeNo: "F2020-055", tags: sarah },
   ];
 }
 
@@ -221,8 +301,25 @@ export function demoSessionsFor(asOf: Date = now()): DemoSession[] {
   const span = (date: string, hm: string) =>
     DateTime.fromISO(`${date}T${hm}`, { zone: DEMO_ZONE }).toJSDate();
   const { split, forgot } = appOnlyDates(asOf);
+  const { today } = demoPeriods(asOf);
 
   return [
+    /*
+     * 오늘 아침에 시작해서 아직 안 끝낸 근무 — "지금 근무 중".
+     *
+     * 정산기간을 월로 바꾸니 종료 안 된 근무(forgot)가 지난달로 밀려서
+     * `stale` 이 되고, 재실 요약의 "근무 중" 이 0명이 됐다. 종료 안 됨과
+     * 근무 중은 다른 상태이므로 둘 다 보여야 한다.
+     */
+    {
+      employeeNo: "F2016-008",
+      workDate: today,
+      startedAt: span(today, "09:40"),
+      endedAt: null,
+      source: "app",
+      closedManually: false,
+      closedNote: "",
+    },
     {
       employeeNo: "F2016-008",
       workDate: split,
