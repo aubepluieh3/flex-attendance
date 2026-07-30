@@ -588,6 +588,17 @@ export default async function Page({
           <div className="tile">
             <div className="k">소정근로</div>
             <div className="v">{hm(summary.targetMinutes)}</div>
+            {/*
+              휴가로 줄어든 목표는 왜 줄었는지 같이 말한다. 안 적으면 옆자리는
+              184시간인데 나는 180시간이고 그 이유가 화면에 없다 — 계약
+              소정근로인지 휴가 반영 후 값인지도 구분되지 않는다.
+            */}
+            {summary.approvedLeaveMinutes > 0 && (
+              <div className="k" style={{ marginTop: 2 }}>
+                계약 {hm(summary.scheduledTargetMinutes)} · 휴가{" "}
+                {hm(summary.approvedLeaveMinutes)} 차감
+              </div>
+            )}
           </div>
           {/* 목표를 채웠으면 페이스는 의미가 없다. 두 메시지가 모순되면 안 된다. */}
           <div className="tile">

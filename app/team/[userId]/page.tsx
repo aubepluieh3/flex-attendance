@@ -195,6 +195,12 @@ export default async function TeamMemberPage({
           <div className="tile">
             <div className="k">소정근로</div>
             <div className="v">{hm(summary.targetMinutes)}</div>
+            {summary.approvedLeaveMinutes > 0 && (
+              <div className="k" style={{ marginTop: 2 }}>
+                계약 {hm(summary.scheduledTargetMinutes)} · 휴가{" "}
+                {hm(summary.approvedLeaveMinutes)} 차감
+              </div>
+            )}
           </div>
           <div className="tile">
             <div className="k">주 평균</div>

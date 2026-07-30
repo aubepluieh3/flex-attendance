@@ -116,7 +116,21 @@ export type PeriodSummary = {
   partialEmployment: boolean;
 
   businessDays: number;
-  /** 소정근로 = 영업일 × 8h − 휴가 차감 */
+  /**
+   * **계약상 소정근로** — 휴가를 빼기 전. 영업일 × 1일 소정근로(또는 fixed).
+   *
+   * 이걸 따로 안 내보내면 화면에 "휴가 반영 후" 값만 남는다. 그러면 같은 팀
+   * 같은 달인데 옆자리는 184시간, 나는 180시간이고 왜 다른지 알 수 없다.
+   */
+  scheduledTargetMinutes: number;
+  /** 이 기간에 **승인된** 휴가가 소정근로에서 빼는 분. 대기·반려는 안 센다 */
+  approvedLeaveMinutes: number;
+  /**
+   * 실제로 채워야 할 근무시간 = max(0, 계약 소정근로 − 승인 휴가).
+   *
+   * 이름을 requiredWorkMinutes 로 바꾸지 않는다 — 마감 스냅샷 6개 중 하나이고,
+   * 뜻이 바뀌면 마감된 기간에 거짓 변경 경보가 뜬다.
+   */
   targetMinutes: number;
   /** 미완료 일자는 제외한 실근무 합 */
   workedMinutes: number;
@@ -378,6 +392,22 @@ export function computePeriodSummary(
           )
         : 0
       : businessDates.length * rules.standardMinutesPerDay;
+
+  /*
+   * 세 값을 갈라서 내보낸다.
+   *
+   *   scheduledTargetMinutes  계약상 소정근로            184시간
+   *   approvedLeaveMinutes    승인된 휴가                  4시간
+   *   targetMinutes           실제로 채워야 할 근무시간    180시간
+   *
+   * 한 줄로 뭉개면 화면에 180시간만 남는다. 그러면 옆자리는 184시간인데 나는
+   * 180시간인 이유를 알 수 없다 — 계약 소정근로인지 휴가 반영 후 값인지도
+   * 구분되지 않는다.
+   *
+   * targetMinutes 의 뜻은 바꾸지 않는다. 마감 스냅샷 6개 중 하나라서 의미가
+   * 바뀌면 마감된 기간에 거짓 변경 경보가 뜨고 계산 버전을 올려야 한다.
+   * 앞의 두 값은 **추가**일 뿐이라 계산 결과가 달라지지 않는다.
+   */
   const targetMinutes = Math.max(0, grossTarget - timeOffDeduct);
 
   const periodDays = days.filter((d) => inPeriod.has(d.workDate));
@@ -565,6 +595,8 @@ export function computePeriodSummary(
     employed,
     partialEmployment,
     businessDays: businessDates.length,
+    scheduledTargetMinutes: grossTarget,
+    approvedLeaveMinutes: timeOffDeduct,
     targetMinutes,
     workedMinutes,
     remainingMinutes: Math.max(0, targetMinutes - workedMinutes),

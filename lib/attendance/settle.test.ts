@@ -838,3 +838,79 @@ describe("재직기간 교집합 — 중도 입사·퇴사", () => {
     expect(s.targetMinutes).toBe(16 * 60);
   });
 });
+
+// ─────────────────────────────────────────────────────────────
+/*
+ * 소정근로를 셋으로 갈라 내보낸다.
+ *
+ * 한 줄로 뭉개면 화면에 "휴가 반영 후" 값만 남는다. 그러면 같은 팀 같은 달인데
+ * 옆자리는 184시간, 나는 180시간이고 왜 다른지 알 수 없다 — 계약 소정근로인지
+ * 휴가 반영 후 값인지도 구분되지 않는다.
+ *
+ * targetMinutes 의 뜻은 그대로 둔다 (마감 스냅샷 6개 중 하나).
+ */
+describe("계약 소정근로 · 승인 휴가 · 채워야 할 근무", () => {
+  it("휴가가 없으면 계약 소정근로와 같다", () => {
+    const s = computePeriodSummary(week({}), base);
+    expect(s.scheduledTargetMinutes).toBe(40 * 60);
+    expect(s.approvedLeaveMinutes).toBe(0);
+    expect(s.targetMinutes).toBe(40 * 60);
+  });
+
+  it("승인 휴가는 계약 소정근로가 아니라 채워야 할 근무에서만 빠진다", () => {
+    const s = computePeriodSummary(
+      week({
+        timeOff: [
+          { date: "2026-03-04", kind: "half_pm", deductMinutes: 4 * 60 },
+        ],
+      }),
+      base,
+    );
+    expect(s.scheduledTargetMinutes).toBe(40 * 60); // 계약은 그대로
+    expect(s.approvedLeaveMinutes).toBe(4 * 60);
+    expect(s.targetMinutes).toBe(36 * 60);
+  });
+
+  it("항등식: max(0, 계약 − 휴가) = 채워야 할 근무", () => {
+    const cases = [
+      [],
+      [{ date: "2026-03-03", kind: "full" as const, deductMinutes: 8 * 60 }],
+      [
+        { date: "2026-03-02", kind: "full" as const, deductMinutes: 8 * 60 },
+        { date: "2026-03-03", kind: "full" as const, deductMinutes: 8 * 60 },
+        { date: "2026-03-04", kind: "full" as const, deductMinutes: 8 * 60 },
+        { date: "2026-03-05", kind: "full" as const, deductMinutes: 8 * 60 },
+        { date: "2026-03-06", kind: "full" as const, deductMinutes: 8 * 60 },
+      ],
+    ];
+    for (const timeOff of cases) {
+      const s = computePeriodSummary(week({ timeOff }), base);
+      expect(s.targetMinutes).toBe(
+        Math.max(0, s.scheduledTargetMinutes - s.approvedLeaveMinutes),
+      );
+    }
+  });
+
+  it("휴가가 계약 소정근로보다 많아도 채워야 할 근무는 음수가 아니다", () => {
+    const s = computePeriodSummary(
+      week({
+        timeOff: [
+          { date: "2026-03-02", kind: "full", deductMinutes: 100 * 60 },
+        ],
+      }),
+      base,
+    );
+    expect(s.scheduledTargetMinutes).toBe(40 * 60);
+    expect(s.approvedLeaveMinutes).toBe(100 * 60);
+    expect(s.targetMinutes).toBe(0);
+  });
+
+  it("부분 재직이면 계약 소정근로도 집계기간으로 줄어든다", () => {
+    const s = computePeriodSummary(
+      { ...week({}), employment: { hiredAt: "2026-03-05", resignedAt: null } },
+      base,
+    );
+    // 3/05(목) 3/06(금) 두 날만 재직
+    expect(s.scheduledTargetMinutes).toBe(16 * 60);
+  });
+});

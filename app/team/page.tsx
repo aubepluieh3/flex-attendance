@@ -372,6 +372,9 @@ export default async function TeamPage({
                         <>
                           <span>
                             {hm(s.workedMinutes)} / {hm(s.targetMinutes)}
+                            {/* 목표가 남과 다른 이유를 같이 적는다 */}
+                            {s.approvedLeaveMinutes > 0 &&
+                              ` · 휴가 ${hm(s.approvedLeaveMinutes)} 차감`}
                             {s.partialEmployment &&
                               ` · 재직 ${md(s.applicableStart)}~${md(s.applicableEnd)}`}
                           </span>
