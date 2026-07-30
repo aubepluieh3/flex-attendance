@@ -328,9 +328,10 @@ function ShotTeam() {
               !
             </span>
             <span>
-              <span className="ttl">주 52시간 초과 · 박선우</span>
+              {/* 실제 화면은 사람 이름이 제목이고 사유가 아래에 붙는다 */}
+              <span className="ttl">박선우</span>
               <br />
-              <span className="txt">정산기간 평균 53h 10m</span>
+              <span className="txt">주 평균 52시간 초과 (53시간 10분)</span>
             </span>
           </li>
           <li>
@@ -338,9 +339,9 @@ function ShotTeam() {
               !
             </span>
             <span>
-              <span className="ttl">종료 기록 없음 · 김도윤</span>
+              <span className="ttl">김도윤</span>
               <br />
-              <span className="txt">7월 22일</span>
+              <span className="txt">퇴근 기록 없는 날 1일</span>
             </span>
           </li>
           <li>
@@ -348,34 +349,44 @@ function ShotTeam() {
               !
             </span>
             <span>
-              <span className="ttl">의무근로시간대 미준수 · 한지우</span>
+              <span className="ttl">한지우</span>
               <br />
-              <span className="txt">3일 · 10:00–15:00 기준</span>
+              <span className="txt">규정 확인 3건</span>
             </span>
           </li>
         </ul>
 
-        <div className="sect">구성원 진행률 · 기대선 71%</div>
+        {/*
+          실제 화면과 조각 수를 맞춘다 — 이름 · 막대 · 실적/목표 · 판정.
+          전에는 이름 · 막대 · 퍼센트 3칸이었는데 화면에 퍼센트는 없다.
+          판정 칸은 줄마다 같은 자리에 서는 열이라 짧게 유지한다.
+        */}
+        <div className="sect">구성원 · 목표 대비 · 눈금 = 기대선 71%</div>
         <div className="row">
           <span className="n">박선우</span>
           <span className="bar2">
             <i className="over" style={{ width: "96%" }} />
           </span>
-          <span className="p">96%</span>
+          <span className="amt">198시간 / 184시간</span>
+          <span className="st over">한도 초과</span>
         </div>
         <div className="row">
           <span className="n">김도윤</span>
           <span className="bar2">
             <i style={{ width: "67%" }} />
           </span>
-          <span className="p">67%</span>
+          <span className="amt">123시간 / 184시간</span>
+          <span className="st">남음 61시간</span>
         </div>
-        <div className="row">
+        <div className="row sub">
           <span className="n">한지우</span>
           <span className="bar2">
             <i style={{ width: "54%" }} />
           </span>
-          <span className="p">54%</span>
+          <span className="amt">97시간 / 180시간</span>
+          <span className="st">남음 83시간</span>
+          {/* 목표가 남과 다른 이유는 아래 줄로 */}
+          <span className="mt">휴가 4시간 차감</span>
         </div>
       </div>
     </div>

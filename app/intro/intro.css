@@ -652,18 +652,31 @@
   color: #71717a;
 }
 
-/* 사람 줄 (팀 현황) */
+/*
+ * 사람 줄 (팀 현황).
+ *
+ * 실제 화면과 조각 수를 맞춘다 — 이름 · 막대 · 실적/목표 · 판정. 부연(휴가
+ * 차감·재직 구간)이 있는 사람만 아래 줄이 하나 더 붙는다(.row.sub).
+ */
 .kn .shot .row {
   display: grid;
-  grid-template-columns: 62px minmax(0, 1fr) 46px;
+  grid-template-columns: 58px minmax(0, 1fr) auto auto;
+  grid-template-areas: "n bar amt st";
   align-items: center;
-  gap: 10px;
+  gap: 3px 10px;
   margin-top: 9px;
 }
+.kn .shot .row.sub {
+  grid-template-areas:
+    "n bar amt st"
+    "n bar mt mt";
+}
 .kn .shot .row .n {
+  grid-area: n;
   font-size: 12.5px;
 }
 .kn .shot .row .bar2 {
+  grid-area: bar;
   position: relative;
   height: 8px;
   border-radius: 999px;
@@ -679,10 +692,61 @@
 .kn .shot .row .bar2 i.over {
   background: #d03b3b;
 }
-.kn .shot .row .p {
+/*
+ * 실적·판정 칸은 폭을 고정한다.
+ *
+ * auto 로 두면 줄마다 별개 grid 라서 칸 폭이 그 줄 내용에 맞춰지고, 남은 폭을
+ * 막대(1fr)가 먹어서 짧은 줄의 숫자가 오른쪽으로 밀린다 — 실측 7px 어긋났다.
+ */
+.kn .shot .row .amt {
+  grid-area: amt;
+  width: 96px;
   font-size: 12px;
-  text-align: right;
   color: #55555c;
+  white-space: nowrap;
+}
+/* 판정. 줄마다 같은 자리에 서야 훑을 수 있어서 폭을 고정한다 */
+.kn .shot .row .st {
+  grid-area: st;
+  width: 74px;
+  font-size: 12px;
+  color: #71717a;
+  white-space: nowrap;
+}
+.kn .shot .row .st.over {
+  color: #c02f2f;
+  font-weight: 650;
+}
+.kn .shot .row .mt {
+  grid-area: mt;
+  font-size: 11.5px;
+  color: #71717a;
+  white-space: nowrap;
+}
+/*
+ * 아주 좁은 폭에서는 실제 화면과 같이 쌓는다 — 이름이 한 줄, 그 아래 막대
+ * 옆으로 숫자·판정·부연이 쌓인다. 한 줄로 두면 320px 에서 26px 넘쳤다.
+ */
+@media (max-width: 420px) {
+  .kn .shot .row,
+  .kn .shot .row.sub {
+    grid-template-columns: 52px minmax(0, 1fr);
+    grid-template-areas:
+      "n   n"
+      "bar amt"
+      "bar st";
+  }
+  .kn .shot .row.sub {
+    grid-template-areas:
+      "n   n"
+      "bar amt"
+      "bar st"
+      "bar mt";
+  }
+  .kn .shot .row .amt,
+  .kn .shot .row .st {
+    width: auto;
+  }
 }
 
 /* ── 푸터 ── */
