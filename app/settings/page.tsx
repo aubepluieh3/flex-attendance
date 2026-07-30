@@ -48,8 +48,8 @@ export default async function SettingsPage({
                 <span className="what">권한이 없습니다</span>
                 <br />
                 <span className="why">
-                  근태 규칙 변경은 HR 권한이 필요합니다. 전 직원의 집계가
-                  다시 계산됩니다.
+                  근태 규칙 변경은 HR 권한이 필요합니다. 전 직원의 집계가 다시
+                  계산됩니다.
                 </span>
               </span>
             </li>
@@ -134,7 +134,10 @@ export default async function SettingsPage({
         <section className="card">
           <ul className="issues">
             <li>
-              <span className={`icon ${err ? "crit" : "warn"}`} aria-hidden="true">
+              <span
+                className={`icon ${err ? "crit" : "warn"}`}
+                aria-hidden="true"
+              >
                 !
               </span>
               <span className="what">{err ?? msg}</span>
@@ -154,14 +157,18 @@ export default async function SettingsPage({
         아직 CSV 를 한 번도 안 올렸으면 펼쳐 두고, 그 뒤로는 접는다 —
         항상 띄우면 소음이 된다.
       */}
-      <details className="fold" open={neverImported} style={{ marginBottom: 14 }}>
+      <details
+        className="fold"
+        open={neverImported}
+        style={{ marginBottom: 14 }}
+      >
         <summary>처음 설정 순서</summary>
         <div className="scroll-x">
           <ol className="steps">
             <li>
               <b>여기(근태 규칙)를 먼저 맞춥니다.</b> 정산기간·의무근로시간대·
-              휴게·1일 상한은 <b>서면합의 사항</b>입니다. 지금 값은 예시일 뿐이니
-              그대로 쓰면 안 됩니다.
+              휴게·1일 상한은 <b>서면합의 사항</b>입니다. 지금 값은 예시일
+              뿐이니 그대로 쓰면 안 됩니다.
             </li>
             <li>
               <b>공휴일</b>을 넣습니다. 소정근로 계산에서 빠집니다.
@@ -175,9 +182,9 @@ export default async function SettingsPage({
             </li>
           </ol>
           <p className="empty" style={{ marginTop: 10 }}>
-            순서를 바꿔도 되돌릴 수는 있습니다 — 규칙을 고치면 전 직원 집계가 다시
-            계산됩니다. 다만 <b>한 번 본 숫자가 나중에 전부 바뀝니다.</b> 그 숫자로
-            팀장에게 보고했다면 다시 설명해야 합니다.
+            순서를 바꿔도 되돌릴 수는 있습니다 — 규칙을 고치면 전 직원 집계가
+            다시 계산됩니다. 다만 <b>한 번 본 숫자가 나중에 전부 바뀝니다.</b>{" "}
+            그 숫자로 팀장에게 보고했다면 다시 설명해야 합니다.
             <br />
             정산기간(주↔월)은 특히 늦게 바꾸지 마세요. 이미 마감된 기간의 공식
             기록은 그 기간 기준으로 얼어 있어서 경계가 어긋납니다.
@@ -204,10 +211,14 @@ export default async function SettingsPage({
       <section className="card">
         <h2>근태 규칙</h2>
         <form action={saveRulesAction}>
+          <h3>정산 단위</h3>
           <div className="fields">
             <label className="field">
               <span>정산기간</span>
-              <select name="settlementPeriod" defaultValue={rules.settlementKind}>
+              <select
+                name="settlementPeriod"
+                defaultValue={rules.settlementKind}
+              >
                 <option value="week">주</option>
                 <option value="month">월</option>
               </select>
@@ -222,6 +233,10 @@ export default async function SettingsPage({
                 ))}
               </select>
             </label>
+          </div>
+
+          <h3>소정근로 — 채워야 하는 양</h3>
+          <div className="fields">
             <label className="field">
               <span>소정근로 산정</span>
               <select
@@ -250,6 +265,10 @@ export default async function SettingsPage({
                 defaultValue={hours(rules.settlement.standardMinutesPerDay)}
               />
             </label>
+          </div>
+
+          <h3>한도</h3>
+          <div className="fields">
             <label className="field">
               <span>주 평균 상한(시간)</span>
               <input
@@ -257,16 +276,6 @@ export default async function SettingsPage({
                 name="limitHours"
                 step="1"
                 defaultValue={hours(rules.settlement.maxAvgWeeklyMinutes)}
-              />
-            </label>
-            <label className="field">
-              <span>날짜 귀속 기준시각</span>
-              <input
-                type="number"
-                name="dayBoundaryHour"
-                min={0}
-                max={12}
-                defaultValue={a.dayBoundaryHour}
               />
             </label>
             <label className="field">
@@ -281,6 +290,10 @@ export default async function SettingsPage({
                 placeholder="비우면 미적용"
               />
             </label>
+          </div>
+
+          <h3>자동 차감 휴게</h3>
+          <div className="fields">
             <label className="field">
               <span>휴게: 4시간↑ (분)</span>
               <input type="number" name="break4h" defaultValue={break4} />
@@ -289,6 +302,10 @@ export default async function SettingsPage({
               <span>휴게: 8시간↑ (분)</span>
               <input type="number" name="break8h" defaultValue={break8} />
             </label>
+          </div>
+
+          <h3>시간대</h3>
+          <div className="fields">
             <label className="field">
               <span>의무근로 시작</span>
               <input
@@ -337,6 +354,24 @@ export default async function SettingsPage({
                 defaultValue={a.nightWindow.end}
               />
             </label>
+            {/*
+              날짜 귀속 기준시각은 「한도」에 있었다. 한도가 아니라 "몇 시부터를
+              다음 날로 볼 것인가" — 시간대 설정이다.
+            */}
+            <label className="field">
+              <span>날짜 귀속 기준시각</span>
+              <input
+                type="number"
+                name="dayBoundaryHour"
+                min={0}
+                max={12}
+                defaultValue={a.dayBoundaryHour}
+              />
+            </label>
+          </div>
+
+          <h3>운영</h3>
+          <div className="fields">
             <label className="field">
               <span>마감 유예(일)</span>
               <input
@@ -437,7 +472,12 @@ export default async function SettingsPage({
           </label>
           <label className="field grow">
             <span>이름</span>
-            <input type="text" name="name" required placeholder="삼일절 대체공휴일" />
+            <input
+              type="text"
+              name="name"
+              required
+              placeholder="삼일절 대체공휴일"
+            />
           </label>
           <button type="submit">추가</button>
         </form>
@@ -448,34 +488,34 @@ export default async function SettingsPage({
           </p>
         ) : (
           <div className="scroll-x" style={{ marginTop: 14 }}>
-          <table>
-            <tbody>
-              {holidayRows.map((h) => (
-                <tr key={h.id}>
-                  <td>{h.date}</td>
-                  <td>{h.name}</td>
-                  <td>
-                    {/* 지우면 그 날이 영업일이 되어 전 직원 소정근로가 늘어난다 */}
-                    <details className="confirm">
-                      <summary>삭제…</summary>
-                      <div className="box">
-                        <span className="why">
-                          {h.date} 이 다시 영업일이 되어 전 직원 소정근로가
-                          늘어납니다.
-                        </span>
-                        <form action={removeHolidayAction} className="inline">
-                          <input type="hidden" name="id" value={h.id} />
-                          <button type="submit" className="danger">
-                            네, 삭제합니다
-                          </button>
-                        </form>
-                      </div>
-                    </details>
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
+            <table>
+              <tbody>
+                {holidayRows.map((h) => (
+                  <tr key={h.id}>
+                    <td>{h.date}</td>
+                    <td>{h.name}</td>
+                    <td>
+                      {/* 지우면 그 날이 영업일이 되어 전 직원 소정근로가 늘어난다 */}
+                      <details className="confirm">
+                        <summary>삭제…</summary>
+                        <div className="box">
+                          <span className="why">
+                            {h.date} 이 다시 영업일이 되어 전 직원 소정근로가
+                            늘어납니다.
+                          </span>
+                          <form action={removeHolidayAction} className="inline">
+                            <input type="hidden" name="id" value={h.id} />
+                            <button type="submit" className="danger">
+                              네, 삭제합니다
+                            </button>
+                          </form>
+                        </div>
+                      </details>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
           </div>
         )}
       </section>
@@ -520,57 +560,57 @@ export default async function SettingsPage({
           </p>
         ) : (
           <div className="scroll-x" style={{ marginTop: 14 }}>
-          <table>
-            <thead>
-              <tr>
-                <th>날짜</th>
-                <th>사람</th>
-                <th>종류</th>
-                <th>상태</th>
-                <th>차감</th>
-                <th>사유</th>
-                <th />
-              </tr>
-            </thead>
-            <tbody>
-              {timeOffRows.map((t) => (
-                <tr key={t.id}>
-                  <td>{t.date}</td>
-                  <td>{t.userName}</td>
-                  <td>{KIND_LABEL[t.kind]}</td>
-                  {/*
+            <table>
+              <thead>
+                <tr>
+                  <th>날짜</th>
+                  <th>사람</th>
+                  <th>종류</th>
+                  <th>상태</th>
+                  <th>차감</th>
+                  <th>사유</th>
+                  <th />
+                </tr>
+              </thead>
+              <tbody>
+                {timeOffRows.map((t) => (
+                  <tr key={t.id}>
+                    <td>{t.date}</td>
+                    <td>{t.userName}</td>
+                    <td>{KIND_LABEL[t.kind]}</td>
+                    {/*
                     승인 대기·반려는 소정근로에 반영되지 않는다. 상태를 안 보이면
                     HR 이 "등록했는데 왜 집계가 안 바뀌나" 를 알 수 없다.
                   */}
-                  <td>
-                    {t.status === "approved" ? (
-                      "승인"
-                    ) : (
-                      <span className="tag">
-                        {t.status === "pending" ? "승인 대기" : "반려"}
-                      </span>
-                    )}
-                  </td>
-                  <td>
-                    {t.status === "approved" ? (
-                      `${hours(t.deductMinutes)}시간`
-                    ) : (
-                      <span className="none">—</span>
-                    )}
-                  </td>
-                  <td className="none">{t.reason ?? "—"}</td>
-                  <td>
-                    <form action={removeTimeOffAction}>
-                      <input type="hidden" name="id" value={t.id} />
-                      <button type="submit" className="pill">
-                        삭제
-                      </button>
-                    </form>
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
+                    <td>
+                      {t.status === "approved" ? (
+                        "승인"
+                      ) : (
+                        <span className="tag">
+                          {t.status === "pending" ? "승인 대기" : "반려"}
+                        </span>
+                      )}
+                    </td>
+                    <td>
+                      {t.status === "approved" ? (
+                        `${hours(t.deductMinutes)}시간`
+                      ) : (
+                        <span className="none">—</span>
+                      )}
+                    </td>
+                    <td className="none">{t.reason ?? "—"}</td>
+                    <td>
+                      <form action={removeTimeOffAction}>
+                        <input type="hidden" name="id" value={t.id} />
+                        <button type="submit" className="pill">
+                          삭제
+                        </button>
+                      </form>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
           </div>
         )}
       </section>
